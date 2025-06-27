@@ -16,13 +16,13 @@ const ADMIN_ID = process.env.ADMIN_ID;
 
 // 📚 Fixed course list
 const courses = [
-  { name: 'Applied(Sedef)', credit: 5 },
-  { name: 'English', credit: 5 },
-  { name: 'Civic', credit: 4 },
-  { name: 'Enter', credit: 5 },
-  { name: 'Antro', credit: 4 },
-  { name: 'Emerging', credit: 5 },
-  { name: 'C++', credit: 5 }
+  { name: 'Applied Mathematics I(Math. 1041)', credit: 5 },
+  { name: 'Communicative English Language Skills II(FLEn. 1012)', credit: 5 },
+  { name: 'Moral and Civic Education(MCiE. 1012)', credit: 4 },
+  { name: 'Enterprenuership(Mgmt. 1012)', credit: 5 },
+  { name: 'Social Anthropology(Anth. 1012)', credit: 4 },
+  { name: 'Introduction to Emerging Technologies(EmTe.1012)', credit: 5 },
+  { name: 'Computer Programing(ECEg 2052)++', credit: 5 }
 ];
 
 // 🎓 Grade mapping
