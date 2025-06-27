@@ -64,6 +64,14 @@ async function logUserCalculationToFirebase(chatId, session, gpa) {
 
 // 🧠 Session state
 const sessions = {};
+bot.help((ctx) => {
+  ctx.reply(
+    `🤖 *GPA Calculator Bot Help*\n\n` +
+    `This bot is developed by *Amenadam Solomon* (Pre-engineering).\n` +
+    `[GitHub Repository](https://github.com/amenadam)`,
+    { parse_mode: 'Markdown' }
+  );
+});
 
 // 🚀 Start command
 bot.start((ctx) => {
