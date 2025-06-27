@@ -1,12 +1,19 @@
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
-const fs = require('fs');
+const admin = require('firebase-admin');
+
+// 🔐 Firebase initialization
+const serviceAccount = require('./firebaseKey.json');
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+const db = admin.firestore();
+const logsRef = db.collection('logs');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const ADMIN_ID = process.env.ADMIN_ID;
 
-
-// Fixed course list with credit hours
+// 📚 Fixed course list
 const courses = [
   { name: 'Applied(Sedef)', credit: 5 },
   { name: 'English', credit: 5 },
@@ -17,7 +24,7 @@ const courses = [
   { name: 'C++', credit: 5 }
 ];
 
-// Grade mapping: returns letter and point
+// 🎓 Grade mapping
 function getGrade(score) {
   if (score > 90) return { letter: 'A+', point: 4.0 };
   if (score >= 85) return { letter: 'A', point: 4.0 };
@@ -32,43 +39,32 @@ function getGrade(score) {
   if (score >= 30) return { letter: 'FX', point: 0.0 };
   return { letter: 'F', point: 0.0 };
 }
-function logUserCalculation(chatId, session, gpa) {
-  const logData = {
-    userId: chatId,
-    timestamp: new Date().toISOString(),
-    results: session.scores.map((score, i) => ({
-      course: courses[i].name,
-      credit: courses[i].credit,
-      score,
-      grade: getGrade(score).letter,
-      point: getGrade(score).point
-    })),
-    gpa: gpa.toFixed(2)
-  };
 
-  const filePath = './logs.json';
-  let logs = [];
-
+// 🔐 Save calculation to Firestore
+async function logUserCalculationToFirebase(chatId, session, gpa) {
   try {
-    if (fs.existsSync(filePath)) {
-      logs = JSON.parse(fs.readFileSync(filePath));
-    }
+    await logsRef.add({
+      userId: chatId,
+      timestamp: new Date().toISOString(),
+      gpa: gpa.toFixed(2),
+      results: session.scores.map((score, i) => ({
+        course: courses[i].name,
+        credit: courses[i].credit,
+        score,
+        grade: getGrade(score).letter,
+        point: getGrade(score).point
+      }))
+    });
+    console.log(`✅ Logged GPA for ${chatId} to Firebase`);
   } catch (err) {
-    console.error('Failed to read logs:', err);
-  }
-
-  logs.push(logData);
-
-  try {
-    fs.writeFileSync(filePath, JSON.stringify(logs, null, 2));
-  } catch (err) {
-    console.error('Failed to write logs:', err);
+    console.error('❌ Firebase log failed:', err);
   }
 }
 
-// In-memory session data
+// 🧠 Session state
 const sessions = {};
 
+// 🚀 Start command
 bot.start((ctx) => {
   const chatId = ctx.chat.id;
   sessions[chatId] = {
@@ -81,28 +77,30 @@ bot.start((ctx) => {
     `\n\nSend your score (0–100) for: ${courses[0].name}`);
 });
 
-bot.on('text', (ctx) => {
+// 📝 Handle messages
+bot.on('text', async (ctx) => {
   const chatId = ctx.chat.id;
-  const session = sessions[chatId];
 
-  if (!session) return ctx.reply('❗ Use /start to begin.');
-  
+  // 👑 Admin view logs
   if (ctx.from.id.toString() === ADMIN_ID && ctx.message.text === '/logs') {
-  try {
-    const logs = JSON.parse(fs.readFileSync('./logs.json'));
-    if (logs.length === 0) return ctx.reply('📂 No logs found.');
+    try {
+      const snapshot = await logsRef.orderBy('timestamp', 'desc').limit(10).get();
+      if (snapshot.empty) return ctx.reply('📂 No logs found.');
 
-    let message = `📘 All Calculations:\n\n`;
-    logs.forEach((entry, idx) => {
-      message += `#${idx + 1} - User: ${entry.userId}\nGPA: ${entry.gpa}\nTime: ${entry.timestamp}\n\n`;
-    });
+      let message = '📘 Last 10 GPA Calculations:\n\n';
+      snapshot.forEach((doc, i) => {
+        const log = doc.data();
+        message += `#${i + 1} - User: ${log.userId}\nGPA: ${log.gpa}\nTime: ${log.timestamp}\n\n`;
+      });
 
-    return ctx.reply(message.slice(0, 4096)); // Telegram max message length
-  } catch (err) {
-    return ctx.reply('❌ Error reading logs.');
+      return ctx.reply(message.slice(0, 4096));
+    } catch (err) {
+      return ctx.reply('❌ Error reading logs from Firebase.');
+    }
   }
-}
 
+  const session = sessions[chatId];
+  if (!session) return ctx.reply('❗ Use /start to begin.');
 
   const score = parseFloat(ctx.message.text);
   if (isNaN(score) || score < 0 || score > 100) {
@@ -130,14 +128,13 @@ bot.on('text', (ctx) => {
       totalCredits += course.credit;
 
       response += `${course.name}: ${rawScore} → ${letter} (${point}) × ${course.credit} = ${weighted.toFixed(2)}\n`;
-
       console.log(`${course.name}: ${rawScore} → ${letter} (${point}) × ${course.credit} = ${weighted.toFixed(2)}`);
     });
 
     const gpa = totalWeighted / totalCredits;
-    logUserCalculation(chatId, session, gpa);
-    response += `\n🎯 Final GPA: ${gpa.toFixed(2)}`;
+    await logUserCalculationToFirebase(chatId, session, gpa);
 
+    response += `\n🎯 Final GPA: ${gpa.toFixed(2)}`;
     console.log(`🎯 GPA: ${gpa.toFixed(2)}\n`);
 
     ctx.reply(response);
