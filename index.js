@@ -73,9 +73,7 @@ bot.start((ctx) => {
     scores: []
   };
 
-  ctx.reply(`🎓 GPA Calculator\n\nCourses:\n` +
-    courses.map((c, i) => `${i + 1}. ${c.name} (${c.credit} credits)`).join('\n') +
-    `\n\nSend your score (0–100) for: ${courses[0].name}`);
+  ctx.reply(`🎓 GPA Calculator\n\n\n\nSend your score (0–100) for: ${courses[0].name}`);
 });
 
 // 📝 Handle messages
