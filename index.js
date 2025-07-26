@@ -22,7 +22,7 @@ const courses = [
   { name: 'Enterprenuership(Mgmt. 1012)', credit: 5 },
   { name: 'Social Anthropology(Anth. 1012)', credit: 4 },
   { name: 'Introduction to Emerging Technologies(EmTe.1012)', credit: 5 },
-  { name: 'Computer Programing(ECEg 2052)++', credit: 5 }
+  { name: 'Computer Programing(ECEg 2052) C++', credit: 5 }
 ];
 
 // 🎓 Grade mapping
