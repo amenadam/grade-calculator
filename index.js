@@ -105,32 +105,37 @@ bot.on('text', async (ctx) => {
       return ctx.reply('❌ Error reading logs from Firebase.');
     }
   }
-// 👑 Admin-only /checkuser
-bot.command('checkuser', async (ctx) => {
-  if (ctx.from.id.toString() !== ADMIN_ID) {
-    return ctx.reply('🚫 You are not authorized to use this command.');
-  }
+bot.on('text', async (ctx) => {
+  const text = ctx.message.text.trim();
+  const parts = text.split(' ');
 
-  const parts = ctx.message.text.split(' ');
+  // Handle admin-only /checkuser command
+  if (parts[0] === '/checkuser') {
+    if (ctx.from.id.toString() !== ADMIN_ID) {
+      return ctx.reply('🚫 You are not authorized to use this command.');
+    }
 
-  if (parts.length < 2) {
-    return ctx.reply('❗ Please provide a user ID.\nExample: /checkuser 123456789');
-  }
+    if (parts.length < 2) {
+      return ctx.reply('❗ Please provide a user ID.\nExample: /checkuser 123456789');
+    }
 
-  const userId = parts[1];
+    const userId = parts[1];
 
-  try {
-    const user = await ctx.telegram.getChat(userId);
-    ctx.reply(`👤 User Info:
+    try {
+      const user = await ctx.telegram.getChat(userId);
+      return ctx.reply(`👤 User Info:
 🆔 ID: ${user.id}
 👤 Name: ${user.first_name || 'N/A'} ${user.last_name || ''}
 🔗 Username: @${user.username || 'Not set'}
 🌍 Language: ${user.language_code || 'Unknown'}
 `);
-  } catch (err) {
-    ctx.reply('⚠️ Unable to fetch user. They may not have started the bot or the ID is invalid.');
+    } catch (err) {
+      return ctx.reply('⚠️ Unable to fetch user. They may not have started the bot or the ID is invalid.');
+    }
   }
-});
+
+
+
 
   
 
