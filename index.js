@@ -187,7 +187,15 @@ const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.get('/', (req, res) => res.send('OK'));
+app.get('/', (req, res) => res.send(
+  let message = '📘 Last 10 GPA Calculations:\n\n';
+      snapshot.forEach((doc, i) => {
+        const log = doc.data();
+        message += `#${i + 1} - User: ${log.userId}\nGPA: ${log.gpa}\nTime: ${log.timestamp}\n\n`;
+      });
+
+      return ctx.reply(message.slice(0, 4096));
+));
 
 app.listen(PORT, () => {
   console.log(`HTTP server listening on port ${PORT}`);
