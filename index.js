@@ -187,15 +187,28 @@ const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.get('/', (req, res) => res.send(
-  let message = '📘 Last 10 GPA Calculations:\n\n';
-      snapshot.forEach((doc, i) => {
-        const log = doc.data();
-        message += `#${i + 1} - User: ${log.userId}\nGPA: ${log.gpa}\nTime: ${log.timestamp}\n\n`;
-      });
+app.get('/', async (req, res) => {
+  try {
+    const snapshot = await logsRef.orderBy('timestamp', 'desc').limit(10).get();
 
-      return ctx.reply(message.slice(0, 4096));
-));
+    if (snapshot.empty) {
+      return res.send('📂 No logs found.');
+    }
+
+    let message = '📘 Last 10 GPA Calculations:\n\n';
+    snapshot.forEach((doc, i) => {
+      const log = doc.data();
+      message += `#${i + 1} - User: ${log.userId}\nGPA: ${log.gpa}\nTime: ${log.timestamp}\n\n`;
+    });
+
+    // Using <pre> to preserve formatting in HTML
+    res.send(`<pre>${message}</pre>`);
+  } catch (err) {
+    console.error('❌ Error in Express / route:', err);
+    res.status(500).send('❌ Error reading logs from Firebase.');
+  }
+});
+
 
 app.listen(PORT, () => {
   console.log(`HTTP server listening on port ${PORT}`);
