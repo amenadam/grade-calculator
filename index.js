@@ -208,6 +208,13 @@ app.get('/', async (req, res) => {
     res.status(500).send('❌ Error reading logs from Firebase.');
   }
 });
+app.get('/about', (req, res) => {
+  res.send(`
+    <h1>👋 About This Bot</h1>
+    <p>This GPA Calculator Bot was built by <strong>Amenadam Solomon</strong>.</p>
+    <p>🔗 <a href="https://github.com/amenadam" target="_blank">View GitHub Profile</a></p>
+  `);
+});
 
 
 app.listen(PORT, () => {
