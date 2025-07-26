@@ -64,6 +64,7 @@ async function logUserCalculationToFirebase(chatId, session, gpa) {
 
 // 🧠 Session state
 const sessions = {};
+
 bot.help((ctx) => {
   ctx.reply(
     `🤖 *GPA Calculator Bot Help*\n\n` +
@@ -84,12 +85,17 @@ bot.start((ctx) => {
   ctx.reply(`🎓 GPA Calculator\n\n\n\nSend your score (0–100) for: ${courses[0].name}`);
 });
 
-// 📝 Handle messages
+// 📝 Handle all text messages here
 bot.on('text', async (ctx) => {
   const chatId = ctx.chat.id;
+  const text = ctx.message.text.trim();
+  const parts = text.split(' ');
 
-  // 👑 Admin view logs
-  if (ctx.from.id.toString() === ADMIN_ID && ctx.message.text === '/logs') {
+  // 👑 Admin-only /logs command
+  if (text === '/logs') {
+    if (ctx.from.id.toString() !== ADMIN_ID) {
+      return ctx.reply('🚫 You are not authorized to use this command.');
+    }
     try {
       const snapshot = await logsRef.orderBy('timestamp', 'desc').limit(10).get();
       if (snapshot.empty) return ctx.reply('📂 No logs found.');
@@ -105,11 +111,8 @@ bot.on('text', async (ctx) => {
       return ctx.reply('❌ Error reading logs from Firebase.');
     }
   }
-bot.on('text', async (ctx) => {
-  const text = ctx.message.text.trim();
-  const parts = text.split(' ');
 
-  // Handle admin-only /checkuser command
+  // 👑 Admin-only /checkuser command
   if (parts[0] === '/checkuser') {
     if (ctx.from.id.toString() !== ADMIN_ID) {
       return ctx.reply('🚫 You are not authorized to use this command.');
@@ -134,15 +137,11 @@ bot.on('text', async (ctx) => {
     }
   }
 
-
-
-
-  
-
+  // GPA Calculation input flow
   const session = sessions[chatId];
   if (!session) return ctx.reply('❗ Use /start to begin.');
 
-  const score = parseFloat(ctx.message.text);
+  const score = parseFloat(text);
   if (isNaN(score) || score < 0 || score > 100) {
     return ctx.reply('❌ Please enter a valid score (0–100)');
   }
