@@ -102,9 +102,7 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
       doc.text(score.toString(), startX + colWidths.course, y);
       doc.text(letter, startX + colWidths.course + colWidths.score, y);
       doc.text(point.toFixed(2), startX + colWidths.course + colWidths.score + colWidths.grade, y);
-      doc.text(course.credit.toString(), startX + colWidths.course + colWidths.score + colWidths.grade + colWidths.point, y);
-      doc.text(weighted.toFixed(2), startX + colWidths.course + colWidths.score + colWidths.grade + colWidths.point + colWidths.credit, y);
-
+      
       y += 18;
     });
 
@@ -113,6 +111,9 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
 
     doc.moveDown(2);
     doc.fontSize(13).text(`🎯 Final GPA: ${gpa.toFixed(2)}`, { align: 'center' });
+
+    doc.moveDown(2);
+    doc.fontSize(13).text(`THIS IS UNOFFICIAL COPY OF RESULT`, { align: 'center' });
 
     doc.end();
     stream.on('finish', () => resolve(filePath));
