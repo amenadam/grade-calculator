@@ -68,7 +68,7 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
     let y = doc.y;
 
     const colWidths = {
-      course: 260,
+      course: 360,
       score: 50,
       grade: 50,
       point: 50,
