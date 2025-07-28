@@ -1,6 +1,11 @@
 require('dotenv').config();
+const express = require('express');
 const { Telegraf, Markup } = require('telegraf');
 const admin = require('firebase-admin');
+
+// Initialize Express app for health checks
+const app = express();
+const port = process.env.PORT || 3000;
 
 // Firebase initialization
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG_JSON);
@@ -11,9 +16,11 @@ const db = admin.firestore();
 const logsRef = db.collection('logs');
 const usersRef = db.collection('users');
 
+// Bot initialization
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const ADMIN_ID = process.env.ADMIN_ID;
 
+// Course data
 const courses = [
   { name: 'Applied Mathematics I (Math. 1041)', credit: 5 },
   { name: 'Communicative English Language Skills II (FLEn. 1012)', credit: 5 },
@@ -24,6 +31,7 @@ const courses = [
   { name: 'Computer Programming (ECEg 2052)', credit: 5 }
 ];
 
+// Grade calculation
 function getGrade(score) {
   if (score > 90) return { letter: 'A+', point: 4.0 };
   if (score >= 85) return { letter: 'A', point: 4.0 };
@@ -39,8 +47,10 @@ function getGrade(score) {
   return { letter: 'F', point: 0.0 };
 }
 
+// Session storage
 const sessions = {};
 
+// Logging function
 async function logUserCalculation(chatId, session, gpa) {
   await logsRef.add({
     userId: chatId,
@@ -59,6 +69,7 @@ async function logUserCalculation(chatId, session, gpa) {
   });
 }
 
+// Bot commands
 bot.start(async (ctx) => {
   const chatId = ctx.chat.id;
   await usersRef.doc(chatId.toString()).set({
@@ -174,4 +185,65 @@ bot.on('text', async (ctx) => {
   }
 });
 
-bot.launch().then(() => console.log('🤖 Bot running...'));
+// Error handling
+bot.catch((err, ctx) => {
+  console.error(`Error for ${ctx.updateType}:`, err);
+  if (ADMIN_ID) {
+    ctx.telegram.sendMessage(ADMIN_ID, `Bot error: ${err.message}`).catch(console.error);
+  }
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    bot: bot != null
+  });
+});
+
+// Start servers
+const startServers = async () => {
+  try {
+    // Start web server
+    app.listen(port, () => {
+      console.log(`Web server running on port ${port}`);
+    });
+
+    // Start bot
+    await bot.launch();
+    console.log('🤖 Bot is running');
+
+    // Graceful shutdown
+    process.once('SIGINT', () => {
+      bot.stop('SIGINT');
+      process.exit();
+    });
+    process.once('SIGTERM', () => {
+      bot.stop('SIGTERM');
+      process.exit();
+    });
+  } catch (err) {
+    console.error('Failed to start servers:', err);
+    process.exit(1);
+  }
+};
+
+// Auto-restart logic
+const restartBot = async () => {
+  try {
+    console.log('Restarting bot...');
+    await bot.stop();
+    await bot.launch();
+    console.log('Bot restarted successfully');
+  } catch (err) {
+    console.error('Error during restart:', err);
+    setTimeout(restartBot, 5000);
+  }
+};
+
+// Start everything
+startServers();
+
+// Periodic restart to prevent memory leaks
+setInterval(restartBot, 6 * 60 * 60 * 1000); // Every 6 hours
