@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const { Telegraf, Markup } = require('telegraf');
 const admin = require('firebase-admin');
-
+const fetch = require('node-fetch');
 // Initialize Express app for health checks
 const app = express();
 const port = process.env.PORT || 3000;
@@ -192,7 +192,51 @@ bot.catch((err, ctx) => {
     ctx.telegram.sendMessage(ADMIN_ID, `Bot error: ${err.message}`).catch(console.error);
   }
 });
+// Add this near your other endpoint definitions (around line 200 in your original code)
 
+// UptimeRobot monitoring endpoint
+app.get('/uptime-robot', (req, res) => {
+  res.status(200).json({
+    status: 'operational',
+    bot: 'running',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Optional: Add UptimeRobot status command to your bot
+bot.command('status', async (ctx) => {
+  if (ctx.from.id.toString() !== ADMIN_ID) {
+    return ctx.reply('🚫 Not authorized.');
+  }
+  
+  try {
+    const response = await fetch('https://api.uptimerobot.com/v2/getMonitors', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cache-Control': 'no-cache'
+      },
+      body: `api_key=${process.env.UPTIME_ROBOT_API_KEY}&format=json&logs=1`
+    });
+    
+    const data = await response.json();
+    
+    if (data.stat === 'ok') {
+      let statusMessage = '📊 UptimeRobot Status:\n\n';
+      data.monitors.forEach(monitor => {
+        statusMessage += `🔹 ${monitor.friendly_name}: ${monitor.status === 2 ? '✅ Up' : '❌ Down'}\n`;
+        statusMessage += `⏱ Uptime: ${monitor.all_time_uptime_ratio}%\n`;
+        statusMessage += `🔄 Last check: ${new Date(monitor.logs[0].datetime * 1000).toLocaleString()}\n\n`;
+      });
+      ctx.reply(statusMessage);
+    } else {
+      ctx.reply('❌ Failed to fetch UptimeRobot status');
+    }
+  } catch (err) {
+    console.error('UptimeRobot API error:', err);
+    ctx.reply('⚠️ Error fetching UptimeRobot status');
+  }
+});
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({
