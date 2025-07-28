@@ -54,28 +54,42 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
 
     const logoPath = path.join(__dirname, 'logo.png');
     if (fs.existsSync(logoPath)) {
-      doc.image(logoPath, 220, 20, { width: 150 });
+      doc.image(logoPath, 230, 30, { width: 120 });
     }
 
-    doc.moveDown(4);
+    doc.moveDown(6);
     doc.fontSize(20).text('Jimma University', { align: 'center' });
+    doc.fontSize(16).text('GPA Result Report', { align: 'center' });
     doc.moveDown();
-    doc.fontSize(18).text('GPA Result Report', { align: 'center' });
-    doc.moveDown();
-    doc.fontSize(14).text(`Student: ${userFullName}`, { align: 'center' });
-    doc.moveDown();
+    doc.fontSize(13).text(`Student: ${userFullName}`, { align: 'center' });
+    doc.moveDown(2);
 
-    // Table Header
-    doc.fontSize(12).text('Course', 50, doc.y, { continued: true });
-    doc.text('Score', 200, doc.y, { continued: true });
-    doc.text('Grade', 260, doc.y, { continued: true });
-    doc.text('Point', 320, doc.y, { continued: true });
-    doc.text('Credit', 380, doc.y, { continued: true });
-    doc.text('Weighted', 440, doc.y);
-    doc.moveDown(0.5);
-    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+    const startX = 50;
+    let y = doc.y;
+
+    const colWidths = {
+      course: 160,
+      score: 50,
+      grade: 50,
+      point: 50,
+      credit: 50,
+      weighted: 80,
+    };
+
+    // Table header
+    doc.font('Courier-Bold').fontSize(11);
+    doc.text('Course', startX, y);
+    doc.text('Score', startX + colWidths.course, y);
+    doc.text('Grade', startX + colWidths.course + colWidths.score, y);
+    doc.text('Point', startX + colWidths.course + colWidths.score + colWidths.grade, y);
+    doc.text('Credit', startX + colWidths.course + colWidths.score + colWidths.grade + colWidths.point, y);
+    doc.text('Weighted', startX + colWidths.course + colWidths.score + colWidths.grade + colWidths.point + colWidths.credit, y);
+    y += 20;
+    doc.moveTo(startX, y - 5).lineTo(550, y - 5).stroke();
 
     let totalWeighted = 0, totalCredits = 0;
+
+    doc.font('Courier').fontSize(10);
 
     session.scores.forEach((score, i) => {
       const { letter, point } = getGrade(score);
@@ -84,21 +98,23 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
       totalWeighted += weighted;
       totalCredits += course.credit;
 
-      doc.fontSize(12).text(course.name, 50, doc.y, { continued: true });
-      doc.text(score.toString(), 200, doc.y, { continued: true });
-      doc.text(letter, 260, doc.y, { continued: true });
-      doc.text(point.toFixed(2), 320, doc.y, { continued: true });
-      doc.text(course.credit.toString(), 380, doc.y, { continued: true });
-      doc.text(weighted.toFixed(2), 440, doc.y);
+      doc.text(course.name, startX, y);
+      doc.text(score.toString(), startX + colWidths.course, y);
+      doc.text(letter, startX + colWidths.course + colWidths.score, y);
+      doc.text(point.toFixed(2), startX + colWidths.course + colWidths.score + colWidths.grade, y);
+      doc.text(course.credit.toString(), startX + colWidths.course + colWidths.score + colWidths.grade + colWidths.point, y);
+      doc.text(weighted.toFixed(2), startX + colWidths.course + colWidths.score + colWidths.grade + colWidths.point + colWidths.credit, y);
+
+      y += 18;
     });
 
-    doc.moveDown(1);
-    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
     doc.moveDown();
-    doc.fontSize(14).text(`🎯 Final GPA: ${gpa.toFixed(2)}`, { align: 'center' });
+    doc.moveTo(startX, y).lineTo(550, y).stroke();
+
+    doc.moveDown(2);
+    doc.fontSize(13).text(`🎯 Final GPA: ${gpa.toFixed(2)}`, { align: 'center' });
 
     doc.end();
-
     stream.on('finish', () => resolve(filePath));
     stream.on('error', reject);
   });
