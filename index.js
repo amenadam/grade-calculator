@@ -208,8 +208,9 @@ bot.command('status', async (ctx) => {
   if (ctx.from.id.toString() !== ADMIN_ID) {
     return ctx.reply('🚫 Not authorized.');
   }
-  
+
   try {
+    console.log('Fetching UptimeRobot status...'); // Debug log
     const response = await fetch('https://api.uptimerobot.com/v2/getMonitors', {
       method: 'POST',
       headers: {
@@ -218,9 +219,10 @@ bot.command('status', async (ctx) => {
       },
       body: `api_key=${process.env.UPTIME_ROBOT_API_KEY}&format=json&logs=1`
     });
-    
+
     const data = await response.json();
-    
+    console.log('UptimeRobot API Response:', data); // Debug log
+
     if (data.stat === 'ok') {
       let statusMessage = '📊 UptimeRobot Status:\n\n';
       data.monitors.forEach(monitor => {
@@ -230,11 +232,11 @@ bot.command('status', async (ctx) => {
       });
       ctx.reply(statusMessage);
     } else {
-      ctx.reply('❌ Failed to fetch UptimeRobot status');
+      ctx.reply(`❌ UptimeRobot Error: ${data.error?.message || 'Unknown error'}`);
     }
   } catch (err) {
     console.error('UptimeRobot API error:', err);
-    ctx.reply('⚠️ Error fetching UptimeRobot status');
+    ctx.reply(`⚠️ Error: ${err.message}`);
   }
 });
 // Health check endpoint
