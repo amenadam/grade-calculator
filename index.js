@@ -1,4 +1,5 @@
 require('dotenv').config();
+const express = require('express');
 const { Telegraf, Markup } = require('telegraf');
 const admin = require('firebase-admin');
 
@@ -59,6 +60,7 @@ async function logUserCalculation(chatId, session, gpa) {
   });
 }
 
+// Telegram bot handlers (same as before)
 bot.start(async (ctx) => {
   const chatId = ctx.chat.id;
   await usersRef.doc(chatId.toString()).set({
@@ -174,4 +176,35 @@ bot.on('text', async (ctx) => {
   }
 });
 
-bot.launch().then(() => console.log('🤖 Bot running...'));
+// --- Express server to handle webhook ---
+const app = express();
+
+// Use JSON parser for Telegram updates
+app.use(express.json());
+
+// Telegram webhook handler
+app.use(bot.webhookCallback(`/bot${process.env.BOT_TOKEN}`));
+
+// Root route (optional, for health checks)
+app.get('/', (req, res) => {
+  res.send('GPA Calculator Bot is running.');
+});
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, async () => {
+  console.log(`Server listening on port ${PORT}`);
+
+  // Set Telegram webhook to your app URL + /bot<TOKEN>
+  const webhookUrl = process.env.WEBHOOK_URL || ''; // Set your Koyeb app public URL here via env var
+  if (webhookUrl) {
+    try {
+      await bot.telegram.setWebhook(`${webhookUrl}/bot${process.env.BOT_TOKEN}`);
+      console.log('✅ Webhook set:', `${webhookUrl}/bot${process.env.BOT_TOKEN}`);
+    } catch (error) {
+      console.error('❌ Error setting webhook:', error);
+    }
+  } else {
+    console.warn('⚠️ WEBHOOK_URL env variable not set. Please set it to your public URL.');
+  }
+});
