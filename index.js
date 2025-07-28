@@ -69,11 +69,9 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
 
     const colWidths = {
       course: 160,
-      score: 50,
-      grade: 50,
+      score: 100,
+      grade: 100,
       point: 50,
-      credit: 50,
-      weighted: 80,
     };
 
     // Table header
@@ -82,9 +80,7 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
     doc.text('Score', startX + colWidths.course, y);
     doc.text('Grade', startX + colWidths.course + colWidths.score, y);
     doc.text('Point', startX + colWidths.course + colWidths.score + colWidths.grade, y);
-    doc.text('Credit', startX + colWidths.course + colWidths.score + colWidths.grade + colWidths.point, y);
-    doc.text('Weighted', startX + colWidths.course + colWidths.score + colWidths.grade + colWidths.point + colWidths.credit, y);
-    y += 20;
+   y += 20;
     doc.moveTo(startX, y - 5).lineTo(550, y - 5).stroke();
 
     let totalWeighted = 0, totalCredits = 0;
