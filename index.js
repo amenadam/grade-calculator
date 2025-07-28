@@ -1,154 +1,115 @@
-require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
-const admin = require('firebase-admin');
+const { initializeApp, applicationDefault } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
 
-// Firebase initialization
-const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG_JSON);
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
-const db = admin.firestore();
-const logsRef = db.collection('logs');
-const usersRef = db.collection('users');
+// === BOT CONFIG ===
+const bot = new Telegraf('YOUR_BOT_TOKEN');
+const ADMIN_ID = 'YOUR_ADMIN_TELEGRAM_ID'; // Replace with your Telegram ID
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
-const ADMIN_ID = process.env.ADMIN_ID;
+// === FIREBASE INIT ===
+initializeApp({ credential: applicationDefault() });
+const db = getFirestore();
 
-const courses = [
-  { name: 'Applied Mathematics I (Math. 1041)', credit: 5 },
-  { name: 'Communicative English Language Skills II (FLEn. 1012)', credit: 5 },
-  { name: 'Moral and Civic Education (MCiE. 1012)', credit: 4 },
-  { name: 'Entrepreneurship (Mgmt. 1012)', credit: 5 },
-  { name: 'Social Anthropology (Anth. 1012)', credit: 4 },
-  { name: 'Introduction to Emerging Technologies (EmTe. 1012)', credit: 5 },
-  { name: 'Computer Programming (ECEg 2052)', credit: 5 }
-];
+// === MAIN MENU ===
+const mainMenu = Markup.keyboard([
+  ['🎓 Calculate GPA'],
+  ['📢 About']
+]).resize();
 
-function getGrade(score) {
-  if (score > 90) return { letter: 'A+', point: 4.0 };
-  if (score >= 85) return { letter: 'A', point: 4.0 };
-  if (score >= 80) return { letter: 'A-', point: 3.75 };
-  if (score >= 75) return { letter: 'B+', point: 3.5 };
-  if (score >= 70) return { letter: 'B', point: 3.0 };
-  if (score >= 65) return { letter: 'B-', point: 2.75 };
-  if (score >= 60) return { letter: 'C+', point: 2.5 };
-  if (score >= 50) return { letter: 'C', point: 2.0 };
-  if (score >= 45) return { letter: 'C-', point: 1.75 };
-  if (score >= 40) return { letter: 'D', point: 1.0 };
-  if (score >= 30) return { letter: 'FX', point: 0.0 };
-  return { letter: 'F', point: 0.0 };
-}
-
-const sessions = {};
-
-async function logUserCalculation(chatId, session, gpa) {
-  await logsRef.add({
-    userId: chatId,
-    timestamp: new Date().toISOString(),
-    gpa: gpa.toFixed(2),
-    results: session.scores.map((score, i) => {
-      const grade = getGrade(score);
-      return {
-        course: courses[i].name,
-        credit: courses[i].credit,
-        score,
-        grade: grade.letter,
-        point: grade.point
-      };
-    })
-  });
-}
-
-bot.start(async (ctx) => {
-  const chatId = ctx.chat.id;
-  await usersRef.doc(chatId.toString()).set({
-    id: chatId,
-    username: ctx.from.username || null,
-    name: ctx.from.first_name || '',
-    timestamp: new Date().toISOString()
-  });
-
-  ctx.reply('📘 Welcome to GPA Calculator!',
-    Markup.keyboard([
-      ['🎓 Calculate GPA'],
-      ['📢 About', '📬 Broadcast (Admin)']
-    ]).resize()
-  );
+// === START ===
+bot.start((ctx) => {
+  ctx.reply('👋 Welcome! Use the menu below:', mainMenu);
 });
 
+// === HANDLE TEXT ===
 bot.on('text', async (ctx) => {
-  const chatId = ctx.chat.id;
-  const text = ctx.message.text.trim();
+  const message = ctx.message.text;
 
-  if (text === '📢 About') {
-    return ctx.reply('This bot is developed by Amenadam Solomon\nGitHub: https://github.com/amenadam');
-  }
-
-  if (text === '📬 Broadcast (Admin)') {
-    if (ctx.from.id.toString() !== ADMIN_ID) {
-      return ctx.reply('🚫 Not authorized.');
-    }
-    ctx.reply('📨 Send the broadcast message:');
-    sessions[chatId] = { mode: 'broadcast' };
-    return;
-  }
-
-  if (sessions[chatId]?.mode === 'broadcast') {
-    delete sessions[chatId];
-    const snapshot = await usersRef.get();
-    let success = 0, failed = 0;
-
-    await Promise.all(snapshot.docs.map(async (doc) => {
-      try {
-        await ctx.telegram.sendMessage(doc.id, `📢 Broadcast:\n${text}`);
-        success++;
-      } catch {
-        failed++;
-      }
-    }));
-
-    return ctx.reply(`✅ Sent: ${success}\n❌ Failed: ${failed}`);
-  }
-
-  if (text === '🎓 Calculate GPA') {
-    sessions[chatId] = { index: 0, scores: [] };
-    return ctx.reply(`Send your score for: ${courses[0].name}`);
-  }
-
-  const session = sessions[chatId];
-  if (!session) return;
-
-  const score = parseFloat(text);
-  if (isNaN(score) || score < 0 || score > 100) {
-    return ctx.reply('❌ Enter a valid score (0–100)');
-  }
-
-  session.scores.push(score);
-  session.index++;
-
-  if (session.index < courses.length) {
-    ctx.reply(`Next score for: ${courses[session.index].name}`);
-  } else {
-    let totalWeighted = 0;
-    let totalCredits = 0;
-    let resultText = '📊 GPA Results:\n\n';
-
-    session.scores.forEach((score, i) => {
-      const { letter, point } = getGrade(score);
-      const course = courses[i];
-      const weighted = point * course.credit;
-      totalWeighted += weighted;
-      totalCredits += course.credit;
-
-      resultText += `${course.name}: ${score} → ${letter} (${point}) x ${course.credit} = ${weighted.toFixed(2)}\n`;
+  if (message === '🎓 Calculate GPA') {
+    ctx.reply('📚 Enter your courses in this format:\n\n`Course1 Credit1 Grade1, Course2 Credit2 Grade2, ...`\n\nExample:\n`Math 3 A, Physics 4 B+`', {
+      reply_markup: mainMenu,
+      parse_mode: 'Markdown'
     });
+  }
 
-    const gpa = totalWeighted / totalCredits;
-    await logUserCalculation(chatId, session, gpa);
+  else if (message === '📢 About') {
+    ctx.reply('📌 This bot calculates GPA using semester & year system.\n\n👨‍💻 [Created by @yourusername](https://github.com/yourgithub)', {
+      parse_mode: 'Markdown',
+      disable_web_page_preview: true
+    });
+  }
 
-    ctx.reply(`${resultText}\n🎯 Final GPA: ${gpa.toFixed(2)}`);
-    delete sessions[chatId];
+  // === ADMIN BROADCAST ===
+  else if (ctx.from.id.toString() === ADMIN_ID && message.startsWith('/broadcast ')) {
+    const broadcastMessage = message.replace('/broadcast ', '');
+    const usersSet = new Set();
+
+    try {
+      const snapshot = await db.collection('logs').get();
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        if (data.userID) usersSet.add(data.userID);
+      });
+
+      const users = [...usersSet];
+
+      let sent = 0;
+      for (const uid of users) {
+        try {
+          await ctx.telegram.sendMessage(uid, `📢 *Broadcast from Admin:*\n\n${broadcastMessage}`, { parse_mode: 'Markdown' });
+          sent++;
+        } catch (e) {
+          console.log(`❌ Could not send to ${uid}`);
+        }
+      }
+
+      ctx.reply(`✅ Broadcast sent to ${sent} users.`);
+    } catch (err) {
+      ctx.reply('❌ Failed to fetch users or send broadcast.');
+    }
+  }
+
+  // === GPA CALCULATION ===
+  else {
+    const courseRegex = /([a-zA-Z0-9\s]+)\s+(\d+)\s+([A-F][+-]?)/g;
+    let match, totalPoints = 0, totalCredits = 0;
+    const grades = {
+      'A+': 4, 'A': 4, 'A-': 3.7,
+      'B+': 3.3, 'B': 3, 'B-': 2.7,
+      'C+': 2.3, 'C': 2, 'C-': 1.7,
+      'D+': 1.3, 'D': 1, 'F': 0
+    };
+
+    while ((match = courseRegex.exec(message)) !== null) {
+      const course = match[1].trim();
+      const credit = parseInt(match[2]);
+      const grade = match[3].toUpperCase();
+
+      const point = grades[grade];
+      if (point !== undefined) {
+        totalPoints += point * credit;
+        totalCredits += credit;
+      }
+    }
+
+    if (totalCredits === 0) {
+      ctx.reply('⚠️ Please follow the correct format.\nExample:\n`Math 3 A, Physics 4 B+`');
+      return;
+    }
+
+    const gpa = (totalPoints / totalCredits).toFixed(2);
+    ctx.reply(`✅ Your GPA is: *${gpa}*`, { parse_mode: 'Markdown' });
+
+    // Save log to Firebase
+    await db.collection('logs').add({
+      userID: ctx.from.id,
+      name: ctx.from.first_name,
+      gpa,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 
-bot.launch().then(() => console.log('🤖 Bot running...'));
+// === LAUNCH ===
+bot.launch();
+console.log('🚀 Bot is running...');
