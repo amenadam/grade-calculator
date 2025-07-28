@@ -223,32 +223,28 @@ bot.command('status', async (ctx) => {
   if (ctx.from.id.toString() !== ADMIN_ID) {
     return ctx.reply('🚫 Not authorized.');
   }
-
   try {
     const response = await fetch('https://api.uptimerobot.com/v2/getMonitors', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Cache-Control': 'no-cache'
-      },
-      body: `api_key=${process.env.UPTIME_ROBOT_API_KEY}&format=json&logs=1`
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `api_key=${process.env.UPTIME_ROBOT_API_KEY}&format=json&logs=1&custom_uptime_ratios=30`
     });
-    
     const data = await response.json();
-    
     if (data.stat === 'ok') {
-      let statusMessage = '📊 UptimeRobot Status:\n\n';
+      let message = '📊 UptimeRobot Status:\n\n';
       data.monitors.forEach(monitor => {
-        statusMessage += `🔹 ${monitor.friendly_name}: ${monitor.status === 2 ? '✅ Up' : '❌ Down'}\n`;
-        statusMessage += `⏱ Uptime: ${monitor.all_time_uptime_ratio}%\n`;
-        statusMessage += `🔄 Last check: ${new Date(monitor.logs[0].datetime * 1000).toLocaleString()}\n\n`;
+        const uptime = monitor.custom_uptime_ratio || 'N/A';
+        message += `🔹 *${monitor.friendly_name}* → ${monitor.status === 2 ? '✅ Up' : '❌ Down'}\n`;
+        message += `⏱ Uptime: ${uptime}%\n`;
+        message += `🕒 Last Check: ${new Date(monitor.logs[0]?.datetime * 1000).toLocaleString()}\n\n`;
       });
-      return ctx.reply(statusMessage);
+      return ctx.replyWithMarkdown(message);
+    } else {
+      return ctx.reply(`❌ UptimeRobot Error: ${data.error?.message || 'Unknown error'}`);
     }
-    return ctx.reply('❌ Failed to fetch UptimeRobot status');
   } catch (err) {
     console.error('UptimeRobot API error:', err);
-    return ctx.reply('⚠️ Error fetching UptimeRobot status');
+    return ctx.reply(`⚠️ Error: ${err.message}`);
   }
 });
 
