@@ -1,11 +1,12 @@
-// ✅ UPDATED GPA BOT WITH SEMESTER SYSTEM & BROADCAST MENU FEATURE
 require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const admin = require('firebase-admin');
 
-// 🔐 Firebase initialization
+// Firebase initialization
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG_JSON);
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
 const db = admin.firestore();
 const logsRef = db.collection('logs');
 const usersRef = db.collection('users');
@@ -13,23 +14,15 @@ const usersRef = db.collection('users');
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const ADMIN_ID = process.env.ADMIN_ID;
 
-// 📚 Courses by semester (Only Year 1 Sem 2 available for now)
-const courseCatalog = {
-  'Year 1': {
-    'Semester 1': [], // 🚧 Coming soon
-    'Semester 2': [
-      { name: 'Applied Mathematics I(Math. 1041)', credit: 5 },
-      { name: 'Communicative English Language Skills II(FLEn. 1012)', credit: 5 },
-      { name: 'Moral and Civic Education(MCiE. 1012)', credit: 4 },
-      { name: 'Enterprenuership(Mgmt. 1012)', credit: 5 },
-      { name: 'Social Anthropology(Anth. 1012)', credit: 4 },
-      { name: 'Introduction to Emerging Technologies(EmTe.1012)', credit: 5 },
-      { name: 'Computer Programing(ECEg 2052) C++', credit: 5 }
-    ]
-  }
-};
-
-const sessions = {};
+const courses = [
+  { name: 'Applied Mathematics I (Math. 1041)', credit: 5 },
+  { name: 'Communicative English Language Skills II (FLEn. 1012)', credit: 5 },
+  { name: 'Moral and Civic Education (MCiE. 1012)', credit: 4 },
+  { name: 'Entrepreneurship (Mgmt. 1012)', credit: 5 },
+  { name: 'Social Anthropology (Anth. 1012)', credit: 4 },
+  { name: 'Introduction to Emerging Technologies (EmTe. 1012)', credit: 5 },
+  { name: 'Computer Programming (ECEg 2052)', credit: 5 }
+];
 
 function getGrade(score) {
   if (score > 90) return { letter: 'A+', point: 4.0 };
@@ -46,56 +39,86 @@ function getGrade(score) {
   return { letter: 'F', point: 0.0 };
 }
 
+const sessions = {};
+
 async function logUserCalculation(chatId, session, gpa) {
   await logsRef.add({
     userId: chatId,
-    year: session.year,
-    semester: session.semester,
     timestamp: new Date().toISOString(),
     gpa: gpa.toFixed(2),
     results: session.scores.map((score, i) => {
-      const course = session.courses[i];
       const grade = getGrade(score);
-      return { course: course.name, credit: course.credit, score, grade: grade.letter, point: grade.point };
+      return {
+        course: courses[i].name,
+        credit: courses[i].credit,
+        score,
+        grade: grade.letter,
+        point: grade.point
+      };
     })
   });
 }
 
 bot.start(async (ctx) => {
   const chatId = ctx.chat.id;
-  await usersRef.doc(chatId.toString()).set({ id: chatId, username: ctx.from.username || '', first_name: ctx.from.first_name || '', last_active: new Date().toISOString() }, { merge: true });
+  await usersRef.doc(chatId.toString()).set({
+    id: chatId,
+    username: ctx.from.username || null,
+    name: ctx.from.first_name || '',
+    timestamp: new Date().toISOString()
+  });
 
-  sessions[chatId] = {};
-  ctx.reply('📘 Welcome to GPA Calculator!
-Select your academic year:', Markup.keyboard([['Year 1']]).oneTime().resize());
-});
-
-bot.hears('Year 1', (ctx) => {
-  const chatId = ctx.chat.id;
-  sessions[chatId].year = 'Year 1';
-  ctx.reply('🧭 Choose your semester:', Markup.keyboard([['Semester 1'], ['Semester 2']]).oneTime().resize());
-});
-
-bot.hears('Semester 2', (ctx) => {
-  const chatId = ctx.chat.id;
-  sessions[chatId].semester = 'Semester 2';
-  const courses = courseCatalog['Year 1']['Semester 2'];
-  sessions[chatId].courses = courses;
-  sessions[chatId].index = 0;
-  sessions[chatId].scores = [];
-  ctx.reply(`📌 Enter score for: ${courses[0].name}`);
-});
-
-bot.hears('Semester 1', (ctx) => {
-  ctx.reply('🚧 Semester 1 courses are coming soon.');
+  ctx.reply('📘 Welcome to GPA Calculator!',
+    Markup.keyboard([
+      ['🎓 Calculate GPA'],
+      ['📢 About', '📬 Broadcast (Admin)']
+    ]).resize()
+  );
 });
 
 bot.on('text', async (ctx) => {
   const chatId = ctx.chat.id;
-  const session = sessions[chatId];
-  if (!session || !session.courses) return;
+  const text = ctx.message.text.trim();
 
-  const score = parseFloat(ctx.message.text);
+  if (text === '📢 About') {
+    return ctx.reply('This bot is developed by Amenadam Solomon\nGitHub: https://github.com/amenadam');
+  }
+
+  if (text === '📬 Broadcast (Admin)') {
+    if (ctx.from.id.toString() !== ADMIN_ID) {
+      return ctx.reply('🚫 Not authorized.');
+    }
+    ctx.reply('📨 Send the broadcast message:');
+    sessions[chatId] = { mode: 'broadcast' };
+    return;
+  }
+
+  if (sessions[chatId]?.mode === 'broadcast') {
+    delete sessions[chatId];
+    const snapshot = await usersRef.get();
+    let success = 0, failed = 0;
+
+    await Promise.all(snapshot.docs.map(async (doc) => {
+      try {
+        await ctx.telegram.sendMessage(doc.id, `📢 Broadcast:\n${text}`);
+        success++;
+      } catch {
+        failed++;
+      }
+    }));
+
+    return ctx.reply(`✅ Sent: ${success}\n❌ Failed: ${failed}`);
+  }
+
+  if (text === '🎓 Calculate GPA') {
+    sessions[chatId] = { index: 0, scores: [] };
+    return ctx.reply(`Send your score for: ${courses[0].name}`);
+  }
+
+  const session = sessions[chatId];
+  if (!session) return;
+
+  const score = parseFloat(text);
   if (isNaN(score) || score < 0 || score > 100) {
     return ctx.reply('❌ Enter a valid score (0–100)');
   }
@@ -103,49 +126,29 @@ bot.on('text', async (ctx) => {
   session.scores.push(score);
   session.index++;
 
-  if (session.index < session.courses.length) {
-    ctx.reply(`Next: ${session.courses[session.index].name}`);
+  if (session.index < courses.length) {
+    ctx.reply(`Next score for: ${courses[session.index].name}`);
   } else {
-    let total = 0, credits = 0, result = '📊 GPA Results:\n\n';
+    let totalWeighted = 0;
+    let totalCredits = 0;
+    let resultText = '📊 GPA Results:\n\n';
+
     session.scores.forEach((score, i) => {
-      const course = session.courses[i];
-      const grade = getGrade(score);
-      const weighted = grade.point * course.credit;
-      total += weighted;
-      credits += course.credit;
-      result += `${course.name}: ${score} → ${grade.letter} (${grade.point}) x ${course.credit} = ${weighted.toFixed(2)}\n`;
+      const { letter, point } = getGrade(score);
+      const course = courses[i];
+      const weighted = point * course.credit;
+      totalWeighted += weighted;
+      totalCredits += course.credit;
+
+      resultText += `${course.name}: ${score} → ${letter} (${point}) x ${course.credit} = ${weighted.toFixed(2)}\n`;
     });
 
-    const gpa = total / credits;
+    const gpa = totalWeighted / totalCredits;
     await logUserCalculation(chatId, session, gpa);
-    ctx.reply(result + `\n🎯 Final GPA: ${gpa.toFixed(2)}`);
+
+    ctx.reply(`${resultText}\n🎯 Final GPA: ${gpa.toFixed(2)}`);
     delete sessions[chatId];
   }
 });
 
-// 👑 Admin broadcast
-bot.command('broadcast', async (ctx) => {
-  if (ctx.from.id.toString() !== ADMIN_ID) return;
-  ctx.reply('📝 Send the message you want to broadcast:');
-  sessions[ctx.chat.id] = { broadcastMode: true };
-});
-
-bot.on('text', async (ctx) => {
-  const session = sessions[ctx.chat.id];
-  if (session?.broadcastMode && ctx.from.id.toString() === ADMIN_ID) {
-    const snapshot = await usersRef.get();
-    snapshot.forEach(async (doc) => {
-      try {
-        await bot.telegram.sendMessage(doc.id, `📢 Update:
-${ctx.message.text}`);
-      } catch (e) {
-        console.log(`⚠️ Failed to send to ${doc.id}`);
-      }
-    });
-    delete sessions[ctx.chat.id];
-    return ctx.reply('✅ Broadcast sent.');
-  }
-});
-
-
-bot.launch();
+bot.launch().then(() => console.log('🤖 Bot running...'));
