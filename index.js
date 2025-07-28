@@ -110,7 +110,7 @@ bot.on('text', async (ctx) => {
 
     await Promise.all([...uniqueUserIds].map(async (userId) => {
       try {
-        await ctx.telegram.sendMessage(userId, 📢 Broadcast:\n${text});
+       await ctx.telegram.sendMessage(userId, `📢 Broadcast:\n${text}`);
         success++;
       } catch {
         failed++;
