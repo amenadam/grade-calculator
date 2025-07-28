@@ -1,10 +1,10 @@
 const { Telegraf, Markup } = require('telegraf');
 const { initializeApp, applicationDefault } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
-
+require('dotenv').config();
 // === BOT CONFIG ===
-const bot = new Telegraf('YOUR_BOT_TOKEN');
-const ADMIN_ID = 'YOUR_ADMIN_TELEGRAM_ID'; // Replace with your Telegram ID
+const bot = new Telegraf(process.env.BOT_TOKEN);
+const ADMIN_ID = process.env.ADMIN_ID;
 
 // === FIREBASE INIT ===
 initializeApp({ credential: applicationDefault() });
