@@ -71,6 +71,7 @@ bot.start(async (ctx) => {
   ctx.reply('📘 Welcome to GPA Calculator!',
     Markup.keyboard([
       ['🎓 Calculate GPA'],
+      ['📜 My History'],
       ['📢 About', '📬 Broadcast (Admin)']
     ]).resize()
   );
@@ -122,6 +123,19 @@ bot.on('text', async (ctx) => {
   if (text === '🎓 Calculate GPA') {
     sessions[chatId] = { index: 0, scores: [] };
     return ctx.reply(`Send your score for: ${courses[0].name}`);
+  }
+
+  if (text === '📜 My History') {
+    const snapshot = await logsRef.where('userId', '==', chatId).orderBy('timestamp', 'desc').limit(5).get();
+    if (snapshot.empty) {
+      return ctx.reply('📭 No GPA history found.');
+    }
+    let history = '🕘 Your Last 5 GPA Calculations:\n\n';
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      history += `📅 ${new Date(data.timestamp).toLocaleString()} → GPA: ${data.gpa}\n`;
+    });
+    return ctx.reply(history);
   }
 
   const session = sessions[chatId];
