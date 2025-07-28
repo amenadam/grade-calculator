@@ -113,5 +113,39 @@ bot.command('status', async (ctx) => {
   } catch (err) {
     console.error('UptimeRobot API error:', err);
     return ctx.reply(`⚠️ Error: ${err.message}`);
-  }
+  } 
 });
+
+// Auto-restart at midnight
+function scheduleMidnightRestart() {
+  const now = new Date();
+  const nextMidnight = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + 1,
+    0, 0, 0, 0
+  );
+  const msUntilMidnight = nextMidnight - now;
+
+  setTimeout(() => {
+    console.log("🔄 Restarting bot at midnight...");
+    process.exit(0); // PM2 or systemd should restart the process
+  }, msUntilMidnight);
+
+  // Optional: Schedule every 24h after first
+   setInterval(() => {
+    console.log("🔄 Restarting bot at midnight...");
+    process.exit(0);
+   }, 24 * 60 * 60 * 1000);
+}
+
+scheduleMidnightRestart();
+
+// Start the bot
+bot.launch().then(() => {
+  console.log("✅ Bot is running...");
+});
+
+// Graceful shutdown
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
