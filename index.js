@@ -202,6 +202,9 @@ app.get('/health', (req, res) => {
   });
 });
 
+app.get('/', (req, res) => {
+  res.send("OK");
+});
 // Start servers
 const startServers = async () => {
   try {
