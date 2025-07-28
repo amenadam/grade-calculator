@@ -4,11 +4,9 @@ const { Telegraf, Markup } = require('telegraf');
 const admin = require('firebase-admin');
 const fetch = require('node-fetch');
 
-// Initialize Express app
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Firebase initialization
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG_JSON);
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -17,11 +15,9 @@ const db = admin.firestore();
 const logsRef = db.collection('logs');
 const usersRef = db.collection('users');
 
-// Bot initialization
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const ADMIN_ID = process.env.ADMIN_ID;
 
-// Course data
 const courses = [
   { name: 'Applied Mathematics I (Math. 1041)', credit: 5 },
   { name: 'Communicative English Language Skills II (FLEn. 1012)', credit: 5 },
@@ -32,7 +28,6 @@ const courses = [
   { name: 'Computer Programming (ECEg 2052)', credit: 5 }
 ];
 
-// Grade calculation
 function getGrade(score) {
   if (score > 90) return { letter: 'A+', point: 4.0 };
   if (score >= 85) return { letter: 'A', point: 4.0 };
@@ -48,10 +43,8 @@ function getGrade(score) {
   return { letter: 'F', point: 0.0 };
 }
 
-// Session storage
 const sessions = {};
 
-// Logging function
 async function logUserCalculation(chatId, session, gpa) {
   await logsRef.add({
     userId: chatId,
@@ -70,7 +63,6 @@ async function logUserCalculation(chatId, session, gpa) {
   });
 }
 
-// Middleware to track user activity
 bot.use(async (ctx, next) => {
   if (ctx.from) {
     const chatId = ctx.from.id;
@@ -89,12 +81,9 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
-// Bot commands
 bot.start(async (ctx) => {
   const chatId = ctx.chat.id;
   const user = ctx.from;
-  
-  // Notify admin about new user
   if (ADMIN_ID && ADMIN_ID !== chatId.toString()) {
     try {
       await bot.telegram.sendMessage(
@@ -105,7 +94,6 @@ bot.start(async (ctx) => {
       console.error('Error notifying admin:', err);
     }
   }
-
   await ctx.reply('📘 Welcome to GPA Calculator!',
     Markup.keyboard([
       ['🎓 Calculate GPA'],
@@ -115,24 +103,19 @@ bot.start(async (ctx) => {
   );
 });
 
-// GPA calculation flow
 bot.hears('🎓 Calculate GPA', (ctx) => {
   const chatId = ctx.chat.id;
   sessions[chatId] = { index: 0, scores: [] };
   return ctx.reply(`Send your score for: ${courses[0].name}`);
 });
 
-// History command
 bot.hears('📜 My History', async (ctx) => {
   const chatId = ctx.chat.id;
   const snapshot = await logsRef.where('userId', '==', chatId)
     .orderBy('timestamp', 'desc')
     .limit(5)
     .get();
-
-  if (snapshot.empty) {
-    return ctx.reply('📭 No GPA history found.');
-  }
+  if (snapshot.empty) return ctx.reply('📭 No GPA history found.');
 
   let history = '🕘 Your Last 5 GPA Calculations:\n\n';
   snapshot.forEach(doc => {
@@ -142,35 +125,27 @@ bot.hears('📜 My History', async (ctx) => {
   return ctx.reply(history);
 });
 
-// About command
 bot.hears('📢 About', (ctx) => {
   return ctx.reply('This bot is developed by Amenadam Solomon\nGitHub: https://github.com/amenadam');
 });
 
-// Broadcast command (admin only)
 bot.hears('📬 Broadcast (Admin)', async (ctx) => {
   const chatId = ctx.chat.id;
-  if (chatId.toString() !== ADMIN_ID) {
-    return ctx.reply('🚫 Not authorized.');
-  }
+  if (chatId.toString() !== ADMIN_ID) return ctx.reply('🚫 Not authorized.');
   ctx.reply('📨 Send the broadcast message:');
   sessions[chatId] = { mode: 'broadcast' };
 });
 
-// Handle score input
 bot.on('text', async (ctx) => {
   const chatId = ctx.chat.id;
   const text = ctx.message.text.trim();
   const session = sessions[chatId];
-
   if (!session) return;
 
-  // Handle broadcast mode
   if (session.mode === 'broadcast') {
     delete sessions[chatId];
     const snapshot = await usersRef.get();
     let success = 0, failed = 0;
-
     await Promise.all(snapshot.docs.map(async (doc) => {
       try {
         await ctx.telegram.sendMessage(doc.id, text);
@@ -179,11 +154,9 @@ bot.on('text', async (ctx) => {
         failed++;
       }
     }));
-
     return ctx.reply(`✅ Sent: ${success}\n❌ Failed: ${failed}`);
   }
 
-  // Handle GPA calculation
   const score = parseFloat(text);
   if (isNaN(score) || score < 0 || score > 100) {
     return ctx.reply('❌ Enter a valid score (0-100)');
@@ -196,9 +169,7 @@ bot.on('text', async (ctx) => {
     return ctx.reply(`Next score for: ${courses[session.index].name}`);
   }
 
-  // Calculate final GPA
-  let totalWeighted = 0;
-  let totalCredits = 0;
+  let totalWeighted = 0, totalCredits = 0;
   let resultText = '📊 GPA Results:\n\n';
 
   session.scores.forEach((score, i) => {
@@ -207,7 +178,6 @@ bot.on('text', async (ctx) => {
     const weighted = point * course.credit;
     totalWeighted += weighted;
     totalCredits += course.credit;
-
     resultText += `${course.name}: ${score} → ${letter} (${point}) x ${course.credit} = ${weighted.toFixed(2)}\n`;
   });
 
@@ -218,131 +188,87 @@ bot.on('text', async (ctx) => {
   ctx.reply(`${resultText}\n🎯 Final GPA: ${gpa.toFixed(2)}`);
 });
 
-// UptimeRobot status command
 bot.command('status', async (ctx) => {
-  // Verify admin
-  if (ctx.from.id.toString() !== ADMIN_ID) {
-    return ctx.reply('🚫 Not authorized.');
-  }
-
+  if (ctx.from.id.toString() !== ADMIN_ID) return ctx.reply('🚫 Not authorized.');
   try {
-    // Show "processing" message
     await ctx.reply('🔄 Fetching UptimeRobot status...');
 
-    const apiUrl = 'https://api.uptimerobot.com/v2/getMonitors';
-    const requestBody = new URLSearchParams();
-    requestBody.append('api_key', process.env.UPTIME_ROBOT_API_KEY);
-    requestBody.append('format', 'json');
-    requestBody.append('logs', '1');
-    requestBody.append('custom_uptime_ratios', '30');
-
-    const response = await fetch(apiUrl, {
+    const res = await fetch('https://api.uptimerobot.com/v2/getMonitors', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Cache-Control': 'no-cache'
-      },
-      body: requestBody
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        api_key: process.env.UPTIME_ROBOT_API_KEY,
+        format: 'json',
+        logs: '1',
+        custom_uptime_ratios: '30'
+      })
     });
 
-    if (!response.ok) {
-      throw new Error(`API request failed with status ${response.status}`);
-    }
+    const data = await res.json();
+    if (data.stat !== 'ok') return ctx.reply(`❌ Error: ${data.error.message}`);
 
-    const data = await response.json();
-
-    // Debug logging
-    console.log('UptimeRobot API Response:', JSON.stringify(data, null, 2));
-
-    if (data.stat !== 'ok') {
-      return ctx.reply(`❌ UptimeRobot Error: ${data.error?.message || 'Unknown error'}`);
-    }
-
-    if (!data.monitors || data.monitors.length === 0) {
-      return ctx.reply('ℹ️ No monitors found in UptimeRobot account');
-    }
-
-    let statusMessage = '📊 *UptimeRobot Status*:\n\n';
-    data.monitors.forEach(monitor => {
-      statusMessage += `*${monitor.friendly_name}*\n`;
-      statusMessage += `Status: ${monitor.status === 2 ? '✅ Up' : '❌ Down'}\n`;
-      statusMessage += `Uptime: ${monitor.all_time_uptime_ratio || monitor.custom_uptime_ratio || 'N/A'}%\n`;
-      
-      if (monitor.logs && monitor.logs.length > 0) {
-        const lastCheck = new Date(monitor.logs[0].datetime * 1000);
-        statusMessage += `Last check: ${lastCheck.toLocaleString()}\n`;
+    let msg = '*📊 UptimeRobot Status:*\n\n';
+    data.monitors.forEach(mon => {
+      msg += `*${mon.friendly_name}*\n`;
+      msg += `Status: ${mon.status === 2 ? '✅ Up' : '❌ Down'}\n`;
+      msg += `Uptime: ${mon.custom_uptime_ratio || mon.all_time_uptime_ratio || 'N/A'}%\n`;
+      if (mon.logs?.length) {
+        msg += `Last check: ${new Date(mon.logs[0].datetime * 1000).toLocaleString()}\n`;
       }
-      
-      statusMessage += `\n`;
+      msg += '\n';
     });
-
-    return ctx.replyWithMarkdown(statusMessage);
-  } catch (error) {
-    console.error('Status command error:', error);
-    return ctx.reply(`⚠️ Error fetching status: ${error.message}`);
+    return ctx.replyWithMarkdown(msg);
+  } catch (err) {
+    console.error(err);
+    return ctx.reply(`⚠️ Error: ${err.message}`);
   }
 });
 
 bot.command('testapi', async (ctx) => {
+  if (ctx.from.id.toString() !== ADMIN_ID) return ctx.reply('🚫 Not authorized.');
   try {
-    const test = await fetch('https://api.uptimerobot.com/v2/getMonitors', {
-      method: 'HEAD'
+    const res = await fetch('https://api.uptimerobot.com/v2/getMonitors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        api_key: process.env.UPTIME_ROBOT_API_KEY,
+        format: 'json'
+      })
     });
-    ctx.reply(`API reachable: ${test.status}`);
-  } catch (e) {
-    ctx.reply(`API error: ${e.message}`);
+    const data = await res.json();
+    if (data.stat === 'ok') ctx.reply('✅ UptimeRobot API is working.');
+    else ctx.reply(`❌ API Error: ${data.error.message}`);
+  } catch (err) {
+    ctx.reply(`⚠️ Error: ${err.message}`);
   }
 });
 
-// Health check endpoints
 app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    bot: true
-  });
+  res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString(), bot: true });
 });
 
 app.get('/', (req, res) => {
   res.send('Bot is running');
 });
 
-// Start servers
 const startServers = async () => {
   try {
-    // Web server
-    app.listen(port, () => {
-      console.log(`Web server running on port ${port}`);
-    });
-
-    // Bot
+    app.listen(port, () => console.log(`Web server on port ${port}`));
     await bot.launch();
     console.log('🤖 Bot is running');
 
-    // Schedule daily restart
-    const scheduleDailyRestart = () => {
-      const now = new Date();
-      const nextMidnight = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() + 1,
-        0, 0, 0, 0
-      );
-      const msUntilMidnight = nextMidnight - now;
+    const now = new Date();
+    const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const msUntilMidnight = nextMidnight - now;
+    setTimeout(() => {
+      console.log('🔄 Restarting bot at midnight');
+      process.exit(0);
+    }, msUntilMidnight);
 
-      setTimeout(() => {
-        console.log('🔄 Scheduled restart at midnight');
-        process.exit(0); // Will be restarted by process manager
-      }, msUntilMidnight);
-    };
-
-    scheduleDailyRestart();
-
-    // Graceful shutdown
     process.once('SIGINT', () => bot.stop('SIGINT'));
     process.once('SIGTERM', () => bot.stop('SIGTERM'));
   } catch (err) {
-    console.error('Failed to start servers:', err);
+    console.error('Startup error:', err);
     process.exit(1);
   }
 };
