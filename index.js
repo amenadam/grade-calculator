@@ -103,10 +103,10 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
     });
 
     doc.moveDown();
-    doc.moveTo(startX, y).lineTo(550, y).stroke();
+    doc.moveTo(50, y).lineTo(550, y).stroke();
 
     doc.moveDown(2);
-    doc.fontSize(13).text(`🎯 Final GPA: ${gpa.toFixed(2)}`, { align: 'center' });
+    doc.fontSize(13).text(`Final GPA: ${gpa.toFixed(2)}`, { align: 'center' });
 
     doc.moveDown(2);
     doc.fontSize(13).text(`THIS IS UNOFFICIAL COPY OF RESULT`, { align: 'center' });
