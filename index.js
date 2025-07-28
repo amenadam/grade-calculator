@@ -263,17 +263,32 @@ bot.on('text', async (ctx) => {
 
   if (session.mode === 'broadcast') {
     delete sessions[chatId];
-    const snapshot = await usersRef.get();
+    
+    // Get unique user IDs from logs collection
+    const logsSnapshot = await logsRef.get();
+    const uniqueUserIds = new Set();
+    
+    logsSnapshot.forEach(doc => {
+      uniqueUserIds.add(doc.data().userId);
+    });
+    
     let success = 0, failed = 0;
-    await Promise.all(snapshot.docs.map(async (doc) => {
+    const userIds = Array.from(uniqueUserIds);
+    
+    // Send messages sequentially to avoid rate limits
+    for (const userId of userIds) {
       try {
-        await ctx.telegram.sendMessage(doc.id, text);
+        await ctx.telegram.sendMessage(userId, text);
         success++;
-      } catch {
+        // Small delay between messages
+        await new Promise(resolve => setTimeout(resolve, 200));
+      } catch (err) {
+        console.error(`Failed to send to ${userId}:`, err.message);
         failed++;
       }
-    }));
-    return ctx.reply(`✅ Sent: ${success}\n❌ Failed: ${failed}`);
+    }
+    
+    return ctx.reply(`📊 Broadcast Results:\n✅ Sent: ${success}\n❌ Failed: ${failed}`);
   }
 
   const score = parseFloat(text);
