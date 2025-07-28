@@ -47,7 +47,7 @@ function getGrade(score) {
 
 async function generateGpaPdf(chatId, session, gpa, userFullName) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument();
+    const doc = new PDFDocument({ margin: 50 });
     const filePath = path.join(__dirname, `gpa_${chatId}.pdf`);
     const stream = fs.createWriteStream(filePath);
     doc.pipe(stream);
@@ -65,6 +65,16 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
     doc.fontSize(14).text(`Student: ${userFullName}`, { align: 'center' });
     doc.moveDown();
 
+    // Table Header
+    doc.fontSize(12).text('Course', 50, doc.y, { continued: true });
+    doc.text('Score', 200, doc.y, { continued: true });
+    doc.text('Grade', 260, doc.y, { continued: true });
+    doc.text('Point', 320, doc.y, { continued: true });
+    doc.text('Credit', 380, doc.y, { continued: true });
+    doc.text('Weighted', 440, doc.y);
+    doc.moveDown(0.5);
+    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+
     let totalWeighted = 0, totalCredits = 0;
 
     session.scores.forEach((score, i) => {
@@ -74,9 +84,16 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
       totalWeighted += weighted;
       totalCredits += course.credit;
 
-      doc.fontSize(12).text(`${course.name}: ${score} → ${letter} (${point}) x ${course.credit} = ${weighted.toFixed(2)}`);
+      doc.fontSize(12).text(course.name, 50, doc.y, { continued: true });
+      doc.text(score.toString(), 200, doc.y, { continued: true });
+      doc.text(letter, 260, doc.y, { continued: true });
+      doc.text(point.toFixed(2), 320, doc.y, { continued: true });
+      doc.text(course.credit.toString(), 380, doc.y, { continued: true });
+      doc.text(weighted.toFixed(2), 440, doc.y);
     });
 
+    doc.moveDown(1);
+    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
     doc.moveDown();
     doc.fontSize(14).text(`🎯 Final GPA: ${gpa.toFixed(2)}`, { align: 'center' });
 
@@ -86,7 +103,6 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
     stream.on('error', reject);
   });
 }
-
 const sessions = {};
 
 async function logUserCalculation(chatId, session, gpa) {
