@@ -3,14 +3,16 @@ const express = require('express');
 const { Telegraf, Markup } = require('telegraf');
 const admin = require('firebase-admin');
 const fetch = require('node-fetch');
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG_JSON);
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+
 const db = admin.firestore();
 const logsRef = db.collection('logs');
 const usersRef = db.collection('users');
@@ -41,6 +43,48 @@ function getGrade(score) {
   if (score >= 40) return { letter: 'D', point: 1.0 };
   if (score >= 30) return { letter: 'FX', point: 0.0 };
   return { letter: 'F', point: 0.0 };
+}
+
+async function generateGpaPdf(chatId, session, gpa, userFullName) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument();
+    const filePath = path.join(__dirname, `gpa_${chatId}.pdf`);
+    const stream = fs.createWriteStream(filePath);
+    doc.pipe(stream);
+
+    const logoPath = path.join(__dirname, 'logo.png');
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, 220, 20, { width: 150 });
+    }
+
+    doc.moveDown(4);
+    doc.fontSize(20).text('Jimma University', { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(18).text('GPA Result Report', { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(14).text(`Student: ${userFullName}`, { align: 'center' });
+    doc.moveDown();
+
+    let totalWeighted = 0, totalCredits = 0;
+
+    session.scores.forEach((score, i) => {
+      const { letter, point } = getGrade(score);
+      const course = courses[i];
+      const weighted = point * course.credit;
+      totalWeighted += weighted;
+      totalCredits += course.credit;
+
+      doc.fontSize(12).text(`${course.name}: ${score} → ${letter} (${point}) x ${course.credit} = ${weighted.toFixed(2)}`);
+    });
+
+    doc.moveDown();
+    doc.fontSize(14).text(`🎯 Final GPA: ${gpa.toFixed(2)}`, { align: 'center' });
+
+    doc.end();
+
+    stream.on('finish', () => resolve(filePath));
+    stream.on('error', reject);
+  });
 }
 
 const sessions = {};
@@ -183,64 +227,16 @@ bot.on('text', async (ctx) => {
 
   const gpa = totalWeighted / totalCredits;
   await logUserCalculation(chatId, session, gpa);
+
+  const userFullName = `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim();
+  const pdfPath = await generateGpaPdf(chatId, session, gpa, userFullName);
+
   delete sessions[chatId];
 
-  ctx.reply(`${resultText}\n🎯 Final GPA: ${gpa.toFixed(2)}`);
-});
+  await ctx.reply(`${resultText}\n🎯 Final GPA: ${gpa.toFixed(2)}\n\n📄 Generating PDF...`);
+  await ctx.replyWithDocument({ source: pdfPath, filename: 'GPA_Result.pdf' });
 
-bot.command('status', async (ctx) => {
-  if (ctx.from.id.toString() !== ADMIN_ID) return ctx.reply('🚫 Not authorized.');
-  try {
-    await ctx.reply('🔄 Fetching UptimeRobot status...');
-
-    const res = await fetch('https://api.uptimerobot.com/v2/getMonitors', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        api_key: process.env.UPTIME_ROBOT_API_KEY,
-        format: 'json',
-        logs: '1',
-        custom_uptime_ratios: '30'
-      })
-    });
-
-    const data = await res.json();
-    if (data.stat !== 'ok') return ctx.reply(`❌ Error: ${data.error.message}`);
-
-    let msg = '*📊 UptimeRobot Status:*\n\n';
-    data.monitors.forEach(mon => {
-      msg += `*${mon.friendly_name}*\n`;
-      msg += `Status: ${mon.status === 2 ? '✅ Up' : '❌ Down'}\n`;
-      msg += `Uptime: ${mon.custom_uptime_ratio || mon.all_time_uptime_ratio || 'N/A'}%\n`;
-      if (mon.logs?.length) {
-        msg += `Last check: ${new Date(mon.logs[0].datetime * 1000).toLocaleString()}\n`;
-      }
-      msg += '\n';
-    });
-    return ctx.replyWithMarkdown(msg);
-  } catch (err) {
-    console.error(err);
-    return ctx.reply(`⚠️ Error: ${err.message}`);
-  }
-});
-
-bot.command('testapi', async (ctx) => {
-  if (ctx.from.id.toString() !== ADMIN_ID) return ctx.reply('🚫 Not authorized.');
-  try {
-    const res = await fetch('https://api.uptimerobot.com/v2/getMonitors', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        api_key: process.env.UPTIME_ROBOT_API_KEY,
-        format: 'json'
-      })
-    });
-    const data = await res.json();
-    if (data.stat === 'ok') ctx.reply('✅ UptimeRobot API is working.');
-    else ctx.reply(`❌ API Error: ${data.error.message}`);
-  } catch (err) {
-    ctx.reply(`⚠️ Error: ${err.message}`);
-  }
+  fs.unlinkSync(pdfPath);
 });
 
 app.get('/health', (req, res) => {
