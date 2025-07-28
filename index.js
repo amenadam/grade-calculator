@@ -3,14 +3,17 @@ const express = require('express');
 const { Telegraf, Markup } = require('telegraf');
 const admin = require('firebase-admin');
 const fetch = require('node-fetch');
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
+const path = require('path');
+const QRCode = require('qrcode');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG_JSON);
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+
 const db = admin.firestore();
 const logsRef = db.collection('logs');
 const usersRef = db.collection('users');
@@ -41,6 +44,122 @@ function getGrade(score) {
   if (score >= 40) return { letter: 'D', point: 1.0 };
   if (score >= 30) return { letter: 'FX', point: 0.0 };
   return { letter: 'F', point: 0.0 };
+}
+
+async function generateQRCode(verificationData) {
+  return new Promise((resolve, reject) => {
+    const qrPath = path.join(__dirname, `qr_${Date.now()}.png`);
+    QRCode.toFile(qrPath, verificationData, {
+      color: {
+        dark: '#000000',
+        light: '#ffffff'
+      },
+      width: 150,
+      margin: 1
+    }, (err) => {
+      if (err) reject(err);
+      else resolve(qrPath);
+    });
+  });
+}
+
+async function generateGpaPdf(chatId, session, gpa, userFullName) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ margin: 50 });
+      const filePath = path.join(__dirname, `gpa_${chatId}_${Date.now()}.pdf`);
+      const stream = fs.createWriteStream(filePath);
+      doc.pipe(stream);
+
+      // Generate verification data for QR code
+      const verificationData = JSON.stringify({
+        student: userFullName,
+        gpa: gpa.toFixed(2),
+        date: new Date().toISOString(),
+        verificationId: `JIU-${Math.random().toString(36).substring(2, 10).toUpperCase()}`
+      });
+
+      // Generate QR code
+      const qrPath = await generateQRCode(verificationData);
+      
+      // Add logo if exists
+      const logoPath = path.join(__dirname, 'logo.png');
+      if (fs.existsSync(logoPath)) {
+        doc.image(logoPath, 230, 30, { width: 120 });
+      }
+
+      doc.moveDown(6);
+      doc.fontSize(20).text('Jimma University', { align: 'center' });
+      doc.fontSize(16).text('GPA Result Report', { align: 'center' });
+      doc.moveDown();
+      doc.fontSize(13).text(`Student: ${userFullName}`, { align: 'center' });
+      doc.fontSize(11).text(`Date: ${new Date().toLocaleDateString()}`, { align: 'center' });
+      doc.moveDown(2);
+
+      const startX = 50;
+      let y = doc.y;
+
+      const colWidths = {
+        course: 360,
+        score: 50,
+        grade: 50,
+        point: 50,
+      };
+
+      // Table header
+      doc.font('Helvetica-Bold').fontSize(11);
+      doc.text('Course', startX, y);
+      doc.text('Score', startX + colWidths.course, y);
+      doc.text('Grade', startX + colWidths.course + colWidths.score, y);
+      doc.text('Point', startX + colWidths.course + colWidths.score + colWidths.grade, y);
+      y += 20;
+      doc.moveTo(startX, y - 5).lineTo(550, y - 5).stroke();
+
+      let totalWeighted = 0, totalCredits = 0;
+
+      doc.font('Helvetica').fontSize(10);
+
+      session.scores.forEach((score, i) => {
+        const { letter, point } = getGrade(score);
+        const course = courses[i];
+        const weighted = point * course.credit;
+        totalWeighted += weighted;
+        totalCredits += course.credit;
+
+        doc.text(course.name.substring(0, 40) + (course.name.length > 40 ? '...' : ''), startX, y);
+        doc.text(score.toString(), startX + colWidths.course, y);
+        doc.text(letter, startX + colWidths.course + colWidths.score, y);
+        doc.text(point.toFixed(2), startX + colWidths.course + colWidths.score + colWidths.grade, y);
+        
+        y += 18;
+      });
+
+      doc.moveDown();
+      doc.moveTo(50, y).lineTo(550, y).stroke();
+
+      doc.moveDown(2);
+      doc.fontSize(13).text(`Final GPA: ${gpa.toFixed(2)}`, { align: 'center' });
+
+      // Add QR code for verification
+      doc.moveDown(2);
+      doc.fontSize(10).text('Verification QR Code:', { align: 'center' });
+      doc.image(qrPath, 200, doc.y, { width: 100 });
+      doc.moveDown(6);
+
+      doc.fontSize(10).text('THIS IS UNOFFICIAL COPY OF RESULT', { align: 'center' });
+      doc.fontSize(8).text(`Verification ID: ${JSON.parse(verificationData).verificationId}`, { align: 'center' });
+
+      doc.end();
+      
+      stream.on('finish', () => {
+        fs.unlinkSync(qrPath); // Clean up QR code image
+        resolve(filePath);
+      });
+      stream.on('error', reject);
+    } catch (err) {
+      reject(err);
+    }
+  });
 }
 
 const sessions = {};
@@ -144,32 +263,17 @@ bot.on('text', async (ctx) => {
 
   if (session.mode === 'broadcast') {
     delete sessions[chatId];
-    
-    // Get unique user IDs from logs collection
-    const logsSnapshot = await logsRef.get();
-    const uniqueUserIds = new Set();
-    
-    logsSnapshot.forEach(doc => {
-      uniqueUserIds.add(doc.data().userId);
-    });
-    
+    const snapshot = await usersRef.get();
     let success = 0, failed = 0;
-    const userIds = Array.from(uniqueUserIds);
-    
-    // Send messages sequentially to avoid rate limits
-    for (const userId of userIds) {
+    await Promise.all(snapshot.docs.map(async (doc) => {
       try {
-        await ctx.telegram.sendMessage(userId, text);
+        await ctx.telegram.sendMessage(doc.id, text);
         success++;
-        // Small delay between messages
-        await new Promise(resolve => setTimeout(resolve, 200));
-      } catch (err) {
-        console.error(`Failed to send to ${userId}:`, err.message);
+      } catch {
         failed++;
       }
-    }
-    
-    return ctx.reply(`📊 Broadcast Results:\n✅ Sent: ${success}\n❌ Failed: ${failed}`);
+    }));
+    return ctx.reply(`✅ Sent: ${success}\n❌ Failed: ${failed}`);
   }
 
   const score = parseFloat(text);
@@ -198,63 +302,24 @@ bot.on('text', async (ctx) => {
 
   const gpa = totalWeighted / totalCredits;
   await logUserCalculation(chatId, session, gpa);
-  delete sessions[chatId];
 
-  ctx.reply(`${resultText}\n🎯 Final GPA: ${gpa.toFixed(2)}`);
-});
-
-bot.command('status', async (ctx) => {
-  if (ctx.from.id.toString() !== ADMIN_ID) return ctx.reply('🚫 Not authorized.');
+  const userFullName = `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim();
+  
   try {
-    await ctx.reply('🔄 Fetching UptimeRobot status...');
-
-    const res = await fetch('https://api.uptimerobot.com/v2/getMonitors', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        api_key: process.env.UPTIME_ROBOT_API_KEY,
-        format: 'json',
-        logs: '1',
-        custom_uptime_ratios: '30'
-      })
+    await ctx.reply(`${resultText}\n🎯 Final GPA: ${gpa.toFixed(2)}\n\n📄 Generating PDF report...`);
+    
+    const pdfPath = await generateGpaPdf(chatId, session, gpa, userFullName);
+    await ctx.replyWithDocument({ 
+      source: pdfPath, 
+      filename: `GPA_Result_${userFullName.replace(/\s+/g, '_')}.pdf` 
     });
-
-    const data = await res.json();
-    if (data.stat !== 'ok') return ctx.reply(`❌ Error: ${data.error.message}`);
-
-    let msg = '*📊 UptimeRobot Status:*\n\n';
-    data.monitors.forEach(mon => {
-      msg += `*${mon.friendly_name}*\n`;
-      msg += `Status: ${mon.status === 2 ? '✅ Up' : '❌ Down'}\n`;
-      msg += `Uptime: ${mon.custom_uptime_ratio || mon.all_time_uptime_ratio || 'N/A'}%\n`;
-      if (mon.logs?.length) {
-        msg += `Last check: ${new Date(mon.logs[0].datetime * 1000).toLocaleString()}\n`;
-      }
-      msg += '\n';
-    });
-    return ctx.replyWithMarkdown(msg);
+    
+    fs.unlinkSync(pdfPath); // Clean up PDF file
   } catch (err) {
-    console.error(err);
-    return ctx.reply(`⚠️ Error: ${err.message}`);
-  }
-});
-
-bot.command('testapi', async (ctx) => {
-  if (ctx.from.id.toString() !== ADMIN_ID) return ctx.reply('🚫 Not authorized.');
-  try {
-    const res = await fetch('https://api.uptimerobot.com/v2/getMonitors', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        api_key: process.env.UPTIME_ROBOT_API_KEY,
-        format: 'json'
-      })
-    });
-    const data = await res.json();
-    if (data.stat === 'ok') ctx.reply('✅ UptimeRobot API is working.');
-    else ctx.reply(`❌ API Error: ${data.error.message}`);
-  } catch (err) {
-    ctx.reply(`⚠️ Error: ${err.message}`);
+    console.error('PDF generation error:', err);
+    await ctx.reply('⚠️ Error generating PDF. Here are your results:\n\n' + resultText);
+  } finally {
+    delete sessions[chatId];
   }
 });
 
