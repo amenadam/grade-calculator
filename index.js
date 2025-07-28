@@ -110,19 +110,19 @@ bot.on('text', async (ctx) => {
 
     await Promise.all([...uniqueUserIds].map(async (userId) => {
       try {
-       await ctx.telegram.sendMessage(userId, `📢 Broadcast:\n${text}`);
+        await ctx.telegram.sendMessage(userId, `📢 Broadcast:\n${text}`);
         success++;
       } catch {
         failed++;
       }
     }));
 
-    return ctx.reply(✅ Sent: ${success}\n❌ Failed: ${failed});
+    return ctx.reply(`✅ Sent: ${success}\n❌ Failed: ${failed}`);
   }
 
   if (text === '🎓 Calculate GPA') {
     sessions[chatId] = { index: 0, scores: [] };
-    return ctx.reply(Send your score for: ${courses[0].name});
+    return ctx.reply(`Send your score for: ${courses[0].name}`);
   }
 
   if (text === '📜 My History') {
@@ -133,7 +133,7 @@ bot.on('text', async (ctx) => {
     let history = '🕘 Your Last 5 GPA Calculations:\n\n';
     snapshot.forEach(doc => {
       const data = doc.data();
-      history += 📅 ${new Date(data.timestamp).toLocaleString()} → GPA: ${data.gpa}\n;
+      history += `📅 ${new Date(data.timestamp).toLocaleString()} → GPA: ${data.gpa}\n`;
     });
     return ctx.reply(history);
   }
@@ -150,7 +150,7 @@ bot.on('text', async (ctx) => {
   session.index++;
 
   if (session.index < courses.length) {
-    ctx.reply(Next score for: ${courses[session.index].name});
+    ctx.reply(`Next score for: ${courses[session.index].name}`);
   } else {
     let totalWeighted = 0;
     let totalCredits = 0;
@@ -163,13 +163,13 @@ bot.on('text', async (ctx) => {
       totalWeighted += weighted;
       totalCredits += course.credit;
 
-      resultText += ${course.name}: ${score} → ${letter} (${point}) x ${course.credit} = ${weighted.toFixed(2)}\n;
+      resultText += `${course.name}: ${score} → ${letter} (${point}) x ${course.credit} = ${weighted.toFixed(2)}\n`;
     });
 
     const gpa = totalWeighted / totalCredits;
     await logUserCalculation(chatId, session, gpa);
 
-    ctx.reply(${resultText}\n🎯 Final GPA: ${gpa.toFixed(2)});
+    ctx.reply(`${resultText}\n🎯 Final GPA: ${gpa.toFixed(2)}`);
     delete sessions[chatId];
   }
 });
