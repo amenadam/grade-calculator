@@ -7,6 +7,8 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const QRCode = require('qrcode');
+const session = require('telegraf/session');
+bot.use(session());
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -217,7 +219,8 @@ bot.start(async (ctx) => {
     Markup.keyboard([
       ['🎓 Calculate GPA'],
       ['📜 My History'],
-      ['📢 About', '📬 Broadcast (Admin)']
+      ['📢 About', '📬 Broadcast (Admin)'],
+      ['💬 Chat with Admin']
     ]).resize()
   );
 });
@@ -328,6 +331,51 @@ bot.on('callback_query', async (ctx) => {
     await ctx.answerCbQuery('⚠️ Error retrieving details');
   }
 });
+bot.hears('💬 Chat with Admin', async (ctx) => {
+  ctx.session.awaitingAdminChat = true;
+  return ctx.reply('✍️ Please send your message to the admin. Type /cancel to stop.');
+});
+bot.command('cancel', (ctx) => {
+  if (ctx.session.awaitingAdminChat) {
+    ctx.session.awaitingAdminChat = false;
+    return ctx.reply('❌ Chat with admin cancelled.');
+  }
+});
+bot.on('text', async (ctx) => {
+  if (ctx.session.awaitingAdminChat) {
+    const msg = ctx.message.text;
+
+    await ctx.telegram.sendMessage(ADMIN_ID, 
+      `📩 *New message from user:*\n\n` +
+      `🧑 User ID: \`${ctx.chat.id}\`\n` +
+      `📝 Message:\n${msg}`, { parse_mode: 'Markdown' }
+    );
+
+    ctx.session.awaitingAdminChat = false;
+    return ctx.reply('✅ Message sent to admin. You’ll get a reply soon.');
+  }
+});
+bot.command('reply', async (ctx) => {
+  if (ctx.chat.id.toString() !== ADMIN_ID) {
+    return ctx.reply('🚫 Not authorized.');
+  }
+
+  const [_, targetId, ...rest] = ctx.message.text.split(' ');
+  const replyText = rest.join(' ');
+
+  if (!targetId || !replyText) {
+    return ctx.reply('❗ Usage: /reply <user_id> <message>');
+  }
+
+  try {
+    await ctx.telegram.sendMessage(targetId, `💬 Admin: ${replyText}`);
+    ctx.reply('✅ Reply sent.');
+  } catch (err) {
+    console.error('Reply error:', err.message);
+    ctx.reply('❌ Failed to send the reply. User may have blocked the bot.');
+  }
+});
+
 
 
 bot.hears('📬 Broadcast (Admin)', async (ctx) => {
