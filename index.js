@@ -381,12 +381,11 @@ bot.on("callback_query", async (ctx) => {
     await ctx.answerCbQuery("⚠️ Error retrieving details");
   }
 });
-bot.hears("💬 Chat with Admin", async (ctx) => {
+bot.hears('💬 Chat with Admin', async (ctx) => {
   ctx.session.awaitingAdminChat = true;
-  return ctx.reply(
-    "✍️ Please send your message to the admin. Type /cancel to stop."
-  );
+  return ctx.reply('✍️ Please send your message to the admin. Type /cancel to stop.');
 });
+
 bot.command("cancel", (ctx) => {
   if (ctx.session.awaitingAdminChat) {
     ctx.session.awaitingAdminChat = false;
