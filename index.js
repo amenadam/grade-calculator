@@ -7,7 +7,7 @@ const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
 const QRCode = require("qrcode");
-const { session } = require("@telegraf/session");
+const { session } = require('telegraf');
 
 const app = express();
 const port = process.env.PORT || 3000;
