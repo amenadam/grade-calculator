@@ -228,7 +228,7 @@ bot.hears('🎓 Calculate GPA', (ctx) => {
   return ctx.reply(`Send your score for: ${courses[0].name}`);
 });
 
-bbot.hears('📜 My History', async (ctx) => {
+bot.hears('📜 My History', async (ctx) => {
   const chatId = ctx.chat.id;
   const snapshot = await logsRef.where('userId', '==', chatId)
     .orderBy('timestamp', 'desc')
