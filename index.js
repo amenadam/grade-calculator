@@ -249,7 +249,6 @@ bot.hears('📢 About', (ctx) => {
 });
 bot.hears('logs', async (ctx) => {
   const chatId = ctx.chat.id.toString();
-
   if (chatId !== ADMIN_ID) {
     return ctx.reply('🚫 You are not authorized to access logs.');
   }
@@ -261,24 +260,66 @@ bot.hears('logs', async (ctx) => {
       return ctx.reply('📭 No logs found.');
     }
 
-    let message = '📄 *Latest GPA Logs:*\n\n';
-
-    snapshot.forEach((doc, i) => {
+    for (const doc of snapshot.docs) {
       const data = doc.data();
       const date = new Date(data.timestamp).toLocaleString();
       const gpa = data.gpa;
-      const courses = data.results?.length || 0;
+      const userId = data.userId;
+      const docId = doc.id;
 
-      message += `#${i + 1} - 🧑‍🎓 ID: ${data.userId}\n`;
-      message += `📅 ${date}\n📘 GPA: *${gpa}*\n📚 Courses: ${courses}\n\n`;
-    });
+      const message = `🧾 Log for 🧑‍🎓 ID: ${userId}\n📅 ${date}\n🎯 GPA: *${gpa}*\nTap below to view full details.`;
 
-    await ctx.replyWithMarkdown(message);
+      await ctx.replyWithMarkdown(message, Markup.inlineKeyboard([
+        Markup.button.callback('🔍 View Details', `viewlog_${docId}`)
+      ]));
+    }
   } catch (err) {
     console.error('Error fetching logs:', err);
     await ctx.reply('⚠️ Error retrieving logs.');
   }
 });
+
+bot.on('callback_query', async (ctx) => {
+  const chatId = ctx.chat.id.toString();
+  const callbackData = ctx.callbackQuery.data;
+
+  // Only allow admin to use this
+  if (chatId !== ADMIN_ID) {
+    return ctx.answerCbQuery('🚫 Not authorized');
+  }
+
+  // Handle log detail request
+  if (callbackData.startsWith('viewlog_')) {
+    const docId = callbackData.split('_')[1];
+
+    try {
+      const doc = await logsRef.doc(docId).get();
+
+      if (!doc.exists) {
+        return ctx.answerCbQuery('❌ Log not found');
+      }
+
+      const data = doc.data();
+      const date = new Date(data.timestamp).toLocaleString();
+      const gpa = data.gpa;
+      const userId = data.userId;
+      const results = data.results;
+
+      let message = `📘 *Detailed GPA Log*\n🧑‍🎓 User ID: ${userId}\n📅 Date: ${date}\n🎯 GPA: *${gpa}*\n\n`;
+
+      results.forEach((r, i) => {
+        message += `${i + 1}. ${r.course}\nScore: ${r.score} → ${r.grade} (${r.point}) x ${r.credit}\n\n`;
+      });
+
+      await ctx.answerCbQuery(); // remove loading spinner
+      await ctx.replyWithMarkdown(message);
+    } catch (err) {
+      console.error('Error fetching log details:', err);
+      await ctx.answerCbQuery('⚠️ Error retrieving details');
+    }
+  }
+});
+
 bot.hears('📬 Broadcast (Admin)', async (ctx) => {
   const chatId = ctx.chat.id;
   if (chatId.toString() !== ADMIN_ID) return ctx.reply('🚫 Not authorized.');
