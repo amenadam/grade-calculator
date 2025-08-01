@@ -337,6 +337,38 @@ bot.on('text', async (ctx) => {
     delete sessions[chatId];
   }
 });
+bot.command('logs', async (ctx) => {
+  const chatId = ctx.chat.id.toString();
+
+  if (chatId !== ADMIN_ID) {
+    return ctx.reply('🚫 You are not authorized to access logs.');
+  }
+
+  try {
+    const snapshot = await logsRef.orderBy('timestamp', 'desc').limit(10).get();
+
+    if (snapshot.empty) {
+      return ctx.reply('📭 No logs found.');
+    }
+
+    let message = '📄 *Latest GPA Logs:*\n\n';
+
+    snapshot.forEach((doc, i) => {
+      const data = doc.data();
+      const date = new Date(data.timestamp).toLocaleString();
+      const gpa = data.gpa;
+      const courses = data.results?.length || 0;
+
+      message += `#${i + 1} - 🧑‍🎓 ID: ${data.userId}\n`;
+      message += `📅 ${date}\n📘 GPA: *${gpa}*\n📚 Courses: ${courses}\n\n`;
+    });
+
+    await ctx.replyWithMarkdown(message);
+  } catch (err) {
+    console.error('Error fetching logs:', err);
+    await ctx.reply('⚠️ Error retrieving logs.');
+  }
+});
 
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString(), bot: true });
