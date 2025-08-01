@@ -345,6 +345,39 @@ app.get('/health', (req, res) => {
 app.get('/', (req, res) => {
   res.send('Bot is running');
 });
+// Secure /logs route for ADMIN only
+app.get('/logs', async (req, res) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized: Missing Bearer token' });
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  // Compare token to ADMIN_ID (in practice, you'd use a more secure token system)
+  if (token !== ADMIN_ID) {
+    return res.status(403).json({ error: 'Forbidden: Invalid token' });
+  }
+
+  try {
+    const snapshot = await logsRef.orderBy('timestamp', 'desc').limit(100).get();
+    const logs = [];
+
+    snapshot.forEach(doc => {
+      logs.push({ id: doc.id, ...doc.data() });
+    });
+
+    return res.status(200).json({
+      count: logs.length,
+      logs
+    });
+  } catch (err) {
+    console.error('Error fetching logs:', err);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 
 const startServers = async () => {
   try {
