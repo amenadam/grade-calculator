@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const QRCode = require('qrcode');
 const session = require('telegraf/session');
-bot.use(session());
+
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -21,6 +21,7 @@ const logsRef = db.collection('logs');
 const usersRef = db.collection('users');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
+bot.use(session());
 const ADMIN_ID = process.env.ADMIN_ID;
 
 const courses = [
