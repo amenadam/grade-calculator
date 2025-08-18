@@ -311,7 +311,66 @@ bot.hears("📢 About", (ctx) => {
     "This bot is developed by Amenadam Solomon\nGitHub: https://github.com/amenadam"
   );
 });
+bot.hears("📬 Broadcast (Admin)", async (ctx) => {
+  const chatId = ctx.chat.id.toString();
+  if (chatId !== ADMIN_ID) return ctx.reply("🚫 Not authorized.");
 
+  // Initialize broadcast mode in session
+  ctx.session.broadcastMode = true;
+  return ctx.reply(
+    "📨 Send the broadcast message you want to send to all users:"
+  );
+});
+
+bot.on("text", async (ctx) => {
+  const chatId = ctx.chat.id.toString();
+  const text = ctx.message.text.trim();
+
+  // Handle broadcast mode
+  if (ctx.session?.broadcastMode && chatId === ADMIN_ID) {
+    // Clear broadcast mode
+    ctx.session.broadcastMode = false;
+
+    try {
+      // Get all unique user IDs from logs collection
+      const logsSnapshot = await logsRef.get();
+      const uniqueUserIds = new Set();
+
+      logsSnapshot.forEach((doc) => {
+        uniqueUserIds.add(doc.data().userId);
+      });
+
+      let success = 0,
+        failed = 0;
+      const userIds = Array.from(uniqueUserIds);
+
+      // Send broadcast message to all users
+      await ctx.reply(`⏳ Starting broadcast to ${userIds.length} users...`);
+
+      for (const userId of userIds) {
+        try {
+          await ctx.telegram.sendMessage(
+            userId,
+            `📢 Broadcast Message:\n\n${text}`
+          );
+          success++;
+          // Add small delay to avoid rate limiting
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        } catch (err) {
+          console.error(`Failed to send to ${userId}:`, err.message);
+          failed++;
+        }
+      }
+
+      return ctx.reply(
+        `📊 Broadcast Results:\n✅ Sent successfully: ${success}\n❌ Failed to send: ${failed}`
+      );
+    } catch (err) {
+      console.error("Broadcast error:", err);
+      return ctx.reply("⚠️ An error occurred during broadcast.");
+    }
+  }
+});
 bot.hears("logs", async (ctx) => {
   const chatId = ctx.chat.id.toString();
   if (chatId !== ADMIN_ID) {
