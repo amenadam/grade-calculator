@@ -218,6 +218,14 @@ async function logUserCalculation(chatId, session, gpa) {
   });
 }
 
+// Initialize session middleware
+bot.use((ctx, next) => {
+  if (!ctx.session) {
+    ctx.session = {};
+  }
+  return next();
+});
+
 bot.use(async (ctx, next) => {
   if (ctx.from) {
     const chatId = ctx.from.id;
@@ -303,6 +311,7 @@ bot.hears("📢 About", (ctx) => {
     "This bot is developed by Amenadam Solomon\nGitHub: https://github.com/amenadam"
   );
 });
+
 bot.hears("logs", async (ctx) => {
   const chatId = ctx.chat.id.toString();
   if (chatId !== ADMIN_ID) {
@@ -381,19 +390,27 @@ bot.on("callback_query", async (ctx) => {
     await ctx.answerCbQuery("⚠️ Error retrieving details");
   }
 });
-bot.hears('💬 Chat with Admin', async (ctx) => {
+
+bot.hears("💬 Chat with Admin", async (ctx) => {
+  if (!ctx.session) {
+    ctx.session = {};
+  }
   ctx.session.awaitingAdminChat = true;
-  return ctx.reply('✍️ Please send your message to the admin. Type /cancel to stop.');
+  return ctx.reply(
+    "✍️ Please send your message to the admin. Type /cancel to stop."
+  );
 });
 
 bot.command("cancel", (ctx) => {
-  if (ctx.session.awaitingAdminChat) {
+  if (ctx.session?.awaitingAdminChat) {
     ctx.session.awaitingAdminChat = false;
     return ctx.reply("❌ Chat with admin cancelled.");
   }
+  return ctx.reply("No active chat to cancel.");
 });
+
 bot.on("text", async (ctx) => {
-  if (ctx.session.awaitingAdminChat) {
+  if (ctx.session?.awaitingAdminChat) {
     const msg = ctx.message.text;
 
     await ctx.telegram.sendMessage(
@@ -405,38 +422,10 @@ bot.on("text", async (ctx) => {
     );
 
     ctx.session.awaitingAdminChat = false;
-    return ctx.reply("✅ Message sent to admin. You’ll get a reply soon.");
-  }
-});
-bot.command("reply", async (ctx) => {
-  if (ctx.chat.id.toString() !== ADMIN_ID) {
-    return ctx.reply("🚫 Not authorized.");
+    return ctx.reply("✅ Message sent to admin. You'll get a reply soon.");
   }
 
-  const [_, targetId, ...rest] = ctx.message.text.split(" ");
-  const replyText = rest.join(" ");
-
-  if (!targetId || !replyText) {
-    return ctx.reply("❗ Usage: /reply <user_id> <message>");
-  }
-
-  try {
-    await ctx.telegram.sendMessage(targetId, `💬 Admin: ${replyText}`);
-    ctx.reply("✅ Reply sent.");
-  } catch (err) {
-    console.error("Reply error:", err.message);
-    ctx.reply("❌ Failed to send the reply. User may have blocked the bot.");
-  }
-});
-
-bot.hears("📬 Broadcast (Admin)", async (ctx) => {
-  const chatId = ctx.chat.id;
-  if (chatId.toString() !== ADMIN_ID) return ctx.reply("🚫 Not authorized.");
-  ctx.reply("📨 Send the broadcast message:");
-  sessions[chatId] = { mode: "broadcast" };
-});
-
-bot.on("text", async (ctx) => {
+  // Handle GPA calculation
   const chatId = ctx.chat.id;
   const text = ctx.message.text.trim();
   const session = sessions[chatId];
@@ -534,18 +523,17 @@ bot.on("text", async (ctx) => {
 });
 
 app.get("/health", (req, res) => {
-  res
-    .status(200)
-    .json({
-      status: "healthy",
-      timestamp: new Date().toISOString(),
-      bot: true,
-    });
+  res.status(200).json({
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+    bot: true,
+  });
 });
 
 app.get("/", (req, res) => {
   res.send("Bot is running");
 });
+
 // Secure /logs route for ADMIN only
 app.get("/logs", async (req, res) => {
   const authHeader = req.headers.authorization;
