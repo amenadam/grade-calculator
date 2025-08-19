@@ -1,6 +1,6 @@
 require("dotenv").config();
 const express = require("express");
-const { Telegraf, Markup, session } = require("telegraf");
+const { Telegraf, Markup } = require("telegraf");
 const admin = require("firebase-admin");
 const fetch = require("node-fetch");
 const PDFDocument = require("pdfkit");
@@ -19,7 +19,6 @@ const logsRef = db.collection("logs");
 const usersRef = db.collection("users");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-bot.use(session());
 const ADMIN_ID = process.env.ADMIN_ID;
 
 const courses = [
@@ -260,7 +259,6 @@ bot.start(async (ctx) => {
       ["🎓 Calculate GPA"],
       ["📜 My History"],
       ["📢 About", "📬 Broadcast (Admin)"],
-      //  ["💬 Chat with Admin"],
     ]).resize()
   );
 });
@@ -381,54 +379,6 @@ bot.on("callback_query", async (ctx) => {
     await ctx.answerCbQuery("⚠️ Error retrieving details");
   }
 });
-bot.hears("💬 Chat with Admin", async (ctx) => {
-  ctx.session.awaitingAdminChat = true;
-  return ctx.reply(
-    "✍️ Please send your message to the admin. Type /cancel to stop."
-  );
-});
-bot.command("cancel", (ctx) => {
-  if (ctx.session.awaitingAdminChat) {
-    ctx.session.awaitingAdminChat = false;
-    return ctx.reply("❌ Chat with admin cancelled.");
-  }
-});
-bot.on("text", async (ctx) => {
-  if (ctx.session.awaitingAdminChat) {
-    const msg = ctx.message.text;
-
-    await ctx.telegram.sendMessage(
-      ADMIN_ID,
-      `📩 *New message from user:*\n\n` +
-        `🧑 User ID: \`${ctx.chat.id}\`\n` +
-        `📝 Message:\n${msg}`,
-      { parse_mode: "Markdown" }
-    );
-
-    ctx.session.awaitingAdminChat = false;
-    return ctx.reply("✅ Message sent to admin. You’ll get a reply soon.");
-  }
-});
-bot.command("reply", async (ctx) => {
-  if (ctx.chat.id.toString() !== ADMIN_ID) {
-    return ctx.reply("🚫 Not authorized.");
-  }
-
-  const [_, targetId, ...rest] = ctx.message.text.split(" ");
-  const replyText = rest.join(" ");
-
-  if (!targetId || !replyText) {
-    return ctx.reply("❗ Usage: /reply <user_id> <message>");
-  }
-
-  try {
-    await ctx.telegram.sendMessage(targetId, `💬 Admin: ${replyText}`);
-    ctx.reply("✅ Reply sent.");
-  } catch (err) {
-    console.error("Reply error:", err.message);
-    ctx.reply("❌ Failed to send the reply. User may have blocked the bot.");
-  }
-});
 
 bot.hears("📬 Broadcast (Admin)", async (ctx) => {
   const chatId = ctx.chat.id;
@@ -535,11 +485,13 @@ bot.on("text", async (ctx) => {
 });
 
 app.get("/health", (req, res) => {
-  res.status(200).json({
-    status: "healthy",
-    timestamp: new Date().toISOString(),
-    bot: true,
-  });
+  res
+    .status(200)
+    .json({
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      bot: true,
+    });
 });
 
 app.get("/", (req, res) => {
