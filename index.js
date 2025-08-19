@@ -218,14 +218,6 @@ async function logUserCalculation(chatId, session, gpa) {
   });
 }
 
-// Initialize session middleware
-bot.use((ctx, next) => {
-  if (!ctx.session) {
-    ctx.session = {};
-  }
-  return next();
-});
-
 bot.use(async (ctx, next) => {
   if (ctx.from) {
     const chatId = ctx.from.id;
@@ -268,7 +260,7 @@ bot.start(async (ctx) => {
       ["🎓 Calculate GPA"],
       ["📜 My History"],
       ["📢 About", "📬 Broadcast (Admin)"],
-      ["💬 Chat with Admin"],
+      //  ["💬 Chat with Admin"],
     ]).resize()
   );
 });
@@ -310,66 +302,6 @@ bot.hears("📢 About", (ctx) => {
   return ctx.reply(
     "This bot is developed by Amenadam Solomon\nGitHub: https://github.com/amenadam"
   );
-});
-bot.hears("📬 Broadcast (Admin)", async (ctx) => {
-  const chatId = ctx.chat.id.toString();
-  if (chatId !== ADMIN_ID) return ctx.reply("🚫 Not authorized.");
-
-  // Initialize broadcast mode in session
-  ctx.session.broadcastMode = true;
-  return ctx.reply(
-    "📨 Send the broadcast message you want to send to all users:"
-  );
-});
-
-bot.on("text", async (ctx) => {
-  const chatId = ctx.chat.id.toString();
-  const text = ctx.message.text.trim();
-
-  // Handle broadcast mode
-  if (ctx.session?.broadcastMode && chatId === ADMIN_ID) {
-    // Clear broadcast mode
-    ctx.session.broadcastMode = false;
-
-    try {
-      // Get all unique user IDs from logs collection
-      const logsSnapshot = await logsRef.get();
-      const uniqueUserIds = new Set();
-
-      logsSnapshot.forEach((doc) => {
-        uniqueUserIds.add(doc.data().userId);
-      });
-
-      let success = 0,
-        failed = 0;
-      const userIds = Array.from(uniqueUserIds);
-
-      // Send broadcast message to all users
-      await ctx.reply(`⏳ Starting broadcast to ${userIds.length} users...`);
-
-      for (const userId of userIds) {
-        try {
-          await ctx.telegram.sendMessage(
-            userId,
-            `📢 Broadcast Message:\n\n${text}`
-          );
-          success++;
-          // Add small delay to avoid rate limiting
-          await new Promise((resolve) => setTimeout(resolve, 200));
-        } catch (err) {
-          console.error(`Failed to send to ${userId}:`, err.message);
-          failed++;
-        }
-      }
-
-      return ctx.reply(
-        `📊 Broadcast Results:\n✅ Sent successfully: ${success}\n❌ Failed to send: ${failed}`
-      );
-    } catch (err) {
-      console.error("Broadcast error:", err);
-      return ctx.reply("⚠️ An error occurred during broadcast.");
-    }
-  }
 });
 bot.hears("logs", async (ctx) => {
   const chatId = ctx.chat.id.toString();
@@ -449,27 +381,20 @@ bot.on("callback_query", async (ctx) => {
     await ctx.answerCbQuery("⚠️ Error retrieving details");
   }
 });
-
 bot.hears("💬 Chat with Admin", async (ctx) => {
-  if (!ctx.session) {
-    ctx.session = {};
-  }
   ctx.session.awaitingAdminChat = true;
   return ctx.reply(
     "✍️ Please send your message to the admin. Type /cancel to stop."
   );
 });
-
 bot.command("cancel", (ctx) => {
-  if (ctx.session?.awaitingAdminChat) {
+  if (ctx.session.awaitingAdminChat) {
     ctx.session.awaitingAdminChat = false;
     return ctx.reply("❌ Chat with admin cancelled.");
   }
-  return ctx.reply("No active chat to cancel.");
 });
-
 bot.on("text", async (ctx) => {
-  if (ctx.session?.awaitingAdminChat) {
+  if (ctx.session.awaitingAdminChat) {
     const msg = ctx.message.text;
 
     await ctx.telegram.sendMessage(
@@ -481,10 +406,38 @@ bot.on("text", async (ctx) => {
     );
 
     ctx.session.awaitingAdminChat = false;
-    return ctx.reply("✅ Message sent to admin. You'll get a reply soon.");
+    return ctx.reply("✅ Message sent to admin. You’ll get a reply soon.");
+  }
+});
+bot.command("reply", async (ctx) => {
+  if (ctx.chat.id.toString() !== ADMIN_ID) {
+    return ctx.reply("🚫 Not authorized.");
   }
 
-  // Handle GPA calculation
+  const [_, targetId, ...rest] = ctx.message.text.split(" ");
+  const replyText = rest.join(" ");
+
+  if (!targetId || !replyText) {
+    return ctx.reply("❗ Usage: /reply <user_id> <message>");
+  }
+
+  try {
+    await ctx.telegram.sendMessage(targetId, `💬 Admin: ${replyText}`);
+    ctx.reply("✅ Reply sent.");
+  } catch (err) {
+    console.error("Reply error:", err.message);
+    ctx.reply("❌ Failed to send the reply. User may have blocked the bot.");
+  }
+});
+
+bot.hears("📬 Broadcast (Admin)", async (ctx) => {
+  const chatId = ctx.chat.id;
+  if (chatId.toString() !== ADMIN_ID) return ctx.reply("🚫 Not authorized.");
+  ctx.reply("📨 Send the broadcast message:");
+  sessions[chatId] = { mode: "broadcast" };
+});
+
+bot.on("text", async (ctx) => {
   const chatId = ctx.chat.id;
   const text = ctx.message.text.trim();
   const session = sessions[chatId];
@@ -592,7 +545,6 @@ app.get("/health", (req, res) => {
 app.get("/", (req, res) => {
   res.send("Bot is running");
 });
-
 // Secure /logs route for ADMIN only
 app.get("/logs", async (req, res) => {
   const authHeader = req.headers.authorization;
