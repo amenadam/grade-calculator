@@ -116,11 +116,17 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
       // Add logo if exists
       const logoPath = path.join(__dirname, "logo.png");
       if (fs.existsSync(logoPath)) {
-        doc.image(logoPath, 230, 30, { width: 120 });
+        doc.image(logoPath, 230, 30, { width: 60 });
       }
 
       doc.moveDown(6);
       doc.fontSize(20).text("Jimma University", { align: "center" });
+      doc
+        .fontSize(40)
+        .text(
+          "THIS IS NOT OFFICIAL GRADE REPORT: THIS BOT IS DEVELOPED FOR EDUCATONAL PURPOSE ONLY!!!!",
+          { align: "center" }
+        );
       doc.fontSize(16).text("GPA Result Report", { align: "center" });
       doc.moveDown();
       doc.fontSize(13).text(`Student: ${userFullName}`, { align: "center" });
@@ -283,6 +289,13 @@ bot.start(async (ctx) => {
       ["📜 My History"],
       ["📢 About", "📬 Broadcast (Admin)"],
     ]).resize()
+  );
+});
+
+const version = require("./package.json");
+bot.help((ctx) => {
+  return ctx.reply(
+    `This bot is developed by Amenadam Solomon\nGitHub: https://github.com/amenadam \n bot version: ${version}`
   );
 });
 
