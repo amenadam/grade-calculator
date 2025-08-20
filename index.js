@@ -246,6 +246,17 @@ async function logUserCalculation(chatId, session, gpa) {
   });
 }
 
+function replaceMacros(message, macros = {}) {
+  let processedMessage = message;
+
+  // Replace all macros in the format {{MACRO_NAME}}
+  for (const [key, value] of Object.entries(macros)) {
+    const regex = new RegExp(`{{${key}}}`, "gi");
+    processedMessage = processedMessage.replace(regex, value);
+  }
+
+  return processedMessage;
+}
 bot.use(async (ctx, next) => {
   if (ctx.from) {
     const chatId = ctx.from.id;
@@ -426,7 +437,21 @@ bot.on("callback_query", async (ctx) => {
 bot.hears("📬 Broadcast (Admin)", async (ctx) => {
   const chatId = ctx.chat.id;
   if (chatId.toString() !== ADMIN_ID) return ctx.reply("🚫 Not authorized.");
-  ctx.reply("📨 Send the broadcast message:");
+
+  const macroList = `
+📨 Send your broadcast message with these macros:
+
+• {{VERSION}} - Bot version (${botVersion})
+• {{DATE}} - Current date
+• {{TIME}} - Current time  
+• {{DATETIME}} - Date and time
+• {{BOT_NAME}} - Bot's name
+• {{ADMIN}} - Your name
+
+Example: "Hello! This is {{BOT_NAME}} v{{VERSION}} sending a message on {{DATETIME}}"
+  `.trim();
+
+  ctx.reply(macroList);
   sessions[chatId] = { mode: "broadcast" };
 });
 bot.on("text", (ctx) => {
@@ -462,9 +487,17 @@ bot.on("text", async (ctx) => {
   if (!session) return;
 
   if (session.mode === "broadcast") {
-    delete sessions[chatId];
+    const macros = {
+      VERSION: botVersion,
+      DATE: new Date().toLocaleDateString(),
+      TIME: new Date().toLocaleTimeString(),
+      DATETIME: new Date().toLocaleString(),
+      BOT_NAME: ctx.botInfo.first_name,
+      ADMIN: "Amenadam Solomon",
+    };
 
-    // Get unique user IDs from logs collection
+    const broadcastMessage = replaceMacros(text, macros);
+
     const logsSnapshot = await logsRef.get();
     const uniqueUserIds = new Set();
 
@@ -479,9 +512,8 @@ bot.on("text", async (ctx) => {
     // Send messages sequentially to avoid rate limits
     for (const userId of userIds) {
       try {
-        await ctx.telegram.sendMessage(userId, text);
+        await ctx.telegram.sendMessage(userId, broadcastMessage);
         success++;
-        // Small delay between messages
         await new Promise((resolve) => setTimeout(resolve, 200));
       } catch (err) {
         console.error(`Failed to send to ${userId}:`, err.message);
@@ -489,9 +521,12 @@ bot.on("text", async (ctx) => {
       }
     }
 
-    return ctx.reply(
+    await ctx.reply(
       `📊 Broadcast Results:\n✅ Sent: ${success}\n❌ Failed: ${failed}`
     );
+
+    delete sessions[chatId]; // Delete session after broadcast is complete
+    return;
   }
 
   const score = parseFloat(text);
