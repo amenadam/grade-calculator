@@ -422,7 +422,7 @@ bot.on("text", async (ctx) => {
   const userId = ctx.from.id;
   const text = ctx.message.text.trim();
   const session = sessions[chatId];
-  if (!session) return;
+  if (!session && !userStates[userId]) return;
 
   if (session.mode === "broadcast") {
     delete sessions[chatId];
@@ -513,8 +513,6 @@ bot.on("text", async (ctx) => {
   } finally {
     delete sessions[chatId];
   }
-
-  if (!userStates[userId]) return;
 
   let state = userStates[userId];
 
