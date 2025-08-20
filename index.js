@@ -8,6 +8,8 @@ const fs = require("fs");
 const path = require("path");
 const QRCode = require("qrcode");
 
+const { version } = require("./package.json");
+const botVersion = version;
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -303,7 +305,6 @@ bot.start(async (ctx) => {
   );
 });
 
-const { version } = require("./package.json");
 bot.help((ctx) => {
   return ctx.reply(
     `This bot is developed by Amenadam Solomon\nGitHub: https://github.com/amenadam \n bot version: ${version}`
