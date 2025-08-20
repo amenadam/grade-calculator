@@ -416,13 +416,37 @@ bot.hears("📬 Broadcast (Admin)", async (ctx) => {
   ctx.reply("📨 Send the broadcast message:");
   sessions[chatId] = { mode: "broadcast" };
 });
+bot.on("text", (ctx) => {
+  const userId = ctx.from.id;
+  let text = ctx.message.text;
 
+  // If user has no state, ignore
+  if (!userStates[userId]) return;
+
+  let state = userStates[userId];
+
+  if (state.status === "calculating_cGPA" && state.index === 0) {
+    state.gpas.push(parseFloat(text));
+    ctx.reply("Enter second semester GPA");
+    //console.log("first semester " + text);
+    state.index = 1;
+  } else if (state.status === "calculating_cGPA" && state.index === 1) {
+    state.gpas.push(parseFloat(text));
+    const finalCgpa = calculatecGPA(state.gpas, userId);
+    const { letter } = getGradeByPoint(finalCgpa);
+    ctx.reply(`Your cGPA is: ${finalCgpa} \nGrade: ${letter}`);
+    //console.log("second semester " + text);
+    state.index = 2; // move forward
+    state.status = "done"; // end process
+  } else {
+    console.log("error in handling input for user " + userId);
+  }
+});
 bot.on("text", async (ctx) => {
   const chatId = ctx.chat.id;
-  const userId = ctx.from.id;
   const text = ctx.message.text.trim();
   const session = sessions[chatId];
-  if (!session && !userStates[userId]) return;
+  if (!session) return;
 
   if (session.mode === "broadcast") {
     delete sessions[chatId];
@@ -512,25 +536,6 @@ bot.on("text", async (ctx) => {
     );
   } finally {
     delete sessions[chatId];
-  }
-
-  let state = userStates[userId];
-
-  if (state.status === "calculating_cGPA" && state.index === 0) {
-    state.gpas.push(parseFloat(text));
-    ctx.reply("Enter second semester GPA");
-    //console.log("first semester " + text);
-    state.index = 1;
-  } else if (state.status === "calculating_cGPA" && state.index === 1) {
-    state.gpas.push(parseFloat(text));
-    const finalCgpa = calculatecGPA(state.gpas, userId);
-    const { letter } = getGradeByPoint(finalCgpa);
-    ctx.reply(`Your cGPA is: ${finalCgpa} \nGrade: ${letter}`);
-    //console.log("second semester " + text);
-    state.index = 2; // move forward
-    state.status = "done"; // end process
-  } else {
-    console.log("error in handling input for user " + userId);
   }
 });
 
