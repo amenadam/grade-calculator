@@ -2,7 +2,6 @@ require("dotenv").config();
 const express = require("express");
 const { Telegraf, Markup } = require("telegraf");
 const admin = require("firebase-admin");
-const fetch = require("node-fetch");
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
@@ -62,7 +61,9 @@ function getGradeByPoint(score) {
   if (score >= 0.0) return { letter: "FX", point: 0.0 };
   return { letter: "F", point: 0.0 };
 }
+
 let userStates = {};
+const sessions = {};
 
 const calculatecGPA = (gpas_arr, userId) => {
   let usercGPA = {};
@@ -124,9 +125,9 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
       doc.moveDown(6);
       doc.fontSize(20).text("Jimma University", { align: "center" });
       doc
-        .fontSize(40)
+        .fontSize(10)
         .text(
-          "THIS IS NOT OFFICIAL GRADE REPORT: THIS BOT IS DEVELOPED FOR EDUCATONAL PURPOSE ONLY!!!!",
+          "THIS IS NOT OFFICIAL GRADE REPORT: THIS BOT IS DEVELOPED FOR EDUCATIONAL PURPOSE ONLY!!!!",
           { align: "center" }
         );
       doc.fontSize(16).text("GPA Result Report", { align: "center" });
@@ -228,8 +229,6 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
   });
 }
 
-const sessions = {};
-
 async function logUserCalculation(chatId, session, gpa) {
   await logsRef.add({
     userId: chatId,
@@ -251,7 +250,6 @@ async function logUserCalculation(chatId, session, gpa) {
 function replaceMacros(message, macros = {}) {
   let processedMessage = message;
 
-  // Replace all macros in the format {{MACRO_NAME}}
   for (const [key, value] of Object.entries(macros)) {
     const regex = new RegExp(`{{${key}}}`, "gi");
     processedMessage = processedMessage.replace(regex, value);
@@ -259,6 +257,7 @@ function replaceMacros(message, macros = {}) {
 
   return processedMessage;
 }
+
 bot.use(async (ctx, next) => {
   if (ctx.from) {
     const chatId = ctx.from.id;
@@ -307,13 +306,12 @@ bot.start(async (ctx) => {
 
 bot.help((ctx) => {
   return ctx.reply(
-    `This bot is developed by Amenadam Solomon\nGitHub: https://github.com/amenadam \n bot version: ${version}`
+    `This bot is developed by Amenadam Solomon\nGitHub: https://github.com/amenadam \nBot version: ${botVersion}`
   );
 });
 
 bot.hears("[NEW] Calculate cGPA", (ctx) => {
   const chatId = ctx.chat.id;
-  sessions[chatId] = { index: 0, scores: [] };
   userStates[chatId] = { status: "calculating_cGPA", index: 0, gpas: [] };
   return ctx.reply("Enter first semester GPA");
 });
@@ -356,6 +354,7 @@ bot.hears("📢 About", (ctx) => {
     "This bot is developed by Amenadam Solomon\nGitHub: https://github.com/amenadam"
   );
 });
+
 bot.hears("logs", async (ctx) => {
   const chatId = ctx.chat.id.toString();
   if (chatId !== ADMIN_ID) {
@@ -396,7 +395,7 @@ bot.on("callback_query", async (ctx) => {
   const callbackData = ctx.callbackQuery.data;
 
   if (!callbackData.startsWith("viewlog_")) {
-    return ctx.answerCbQuery(); // Do nothing if irrelevant
+    return ctx.answerCbQuery();
   }
 
   const docId = callbackData.split("_")[1];
@@ -414,7 +413,6 @@ bot.on("callback_query", async (ctx) => {
     const userId = data.userId.toString();
     const results = data.results;
 
-    // Check access: allow if admin or log owner
     if (chatId !== ADMIN_ID && chatId !== userId) {
       return ctx.answerCbQuery("🚫 You are not authorized to view this log");
     }
@@ -427,7 +425,7 @@ bot.on("callback_query", async (ctx) => {
       }) x ${r.credit}\n\n`;
     });
 
-    await ctx.answerCbQuery(); // remove spinner
+    await ctx.answerCbQuery();
     await ctx.replyWithMarkdown(message);
   } catch (err) {
     console.error("Error fetching log details:", err);
@@ -455,35 +453,37 @@ Example: "Hello! This is {{BOT_NAME}} v{{VERSION}} sending a message on {{DATETI
   ctx.reply(macroList);
   sessions[chatId] = { mode: "broadcast" };
 });
-bot.on("text", (ctx) => {
-  const userId = ctx.from.id;
-  let text = ctx.message.text;
 
-  // If user has no state, ignore
-  if (!userStates[userId]) return;
-
-  let state = userStates[userId];
-
-  if (state.status === "calculating_cGPA" && state.index === 0) {
-    state.gpas.push(parseFloat(text));
-    ctx.reply("Enter second semester GPA");
-    //console.log("first semester " + text);
-    state.index = 1;
-  } else if (state.status === "calculating_cGPA" && state.index === 1) {
-    state.gpas.push(parseFloat(text));
-    const finalCgpa = calculatecGPA(state.gpas, userId);
-    const { letter } = getGradeByPoint(finalCgpa);
-    ctx.reply(`Your cGPA is: ${finalCgpa} \nGrade: ${letter}`);
-    //console.log("second semester " + text);
-    state.index = 2; // move forward
-    state.status = "done"; // end process
-  } else {
-    console.log("error in handling input for user " + userId);
-  }
-});
 bot.on("text", async (ctx) => {
   const chatId = ctx.chat.id;
   const text = ctx.message.text.trim();
+
+  // Handle cGPA calculation first
+  if (userStates[chatId] && userStates[chatId].status === "calculating_cGPA") {
+    const state = userStates[chatId];
+
+    if (state.index === 0) {
+      const gpa = parseFloat(text);
+      if (isNaN(gpa) || gpa < 0 || gpa > 4.0) {
+        return ctx.reply("❌ Enter a valid GPA (0.0-4.0)");
+      }
+      state.gpas.push(gpa);
+      state.index = 1;
+      return ctx.reply("Enter second semester GPA");
+    } else if (state.index === 1) {
+      const gpa = parseFloat(text);
+      if (isNaN(gpa) || gpa < 0 || gpa > 4.0) {
+        return ctx.reply("❌ Enter a valid GPA (0.0-4.0)");
+      }
+      state.gpas.push(gpa);
+      const finalCgpa = calculatecGPA(state.gpas, chatId);
+      const { letter } = getGradeByPoint(finalCgpa);
+      await ctx.reply(`Your cGPA is: ${finalCgpa} \nGrade: ${letter}`);
+      delete userStates[chatId];
+      return;
+    }
+  }
+
   const session = sessions[chatId];
   if (!session) return;
 
@@ -494,7 +494,7 @@ bot.on("text", async (ctx) => {
       TIME: new Date().toLocaleTimeString(),
       DATETIME: new Date().toLocaleString(),
       BOT_NAME: ctx.botInfo.first_name,
-      ADMIN: "Amenadam Solomon",
+      ADMIN: ctx.from.first_name || "Admin",
     };
 
     const broadcastMessage = replaceMacros(text, macros);
@@ -510,7 +510,6 @@ bot.on("text", async (ctx) => {
       failed = 0;
     const userIds = Array.from(uniqueUserIds);
 
-    // Send messages sequentially to avoid rate limits
     for (const userId of userIds) {
       try {
         await ctx.telegram.sendMessage(userId, broadcastMessage);
@@ -526,10 +525,11 @@ bot.on("text", async (ctx) => {
       `📊 Broadcast Results:\n✅ Sent: ${success}\n❌ Failed: ${failed}`
     );
 
-    delete sessions[chatId]; // Delete session after broadcast is complete
+    delete sessions[chatId];
     return;
   }
 
+  // Handle GPA calculation
   const score = parseFloat(text);
   if (isNaN(score) || score < 0 || score > 100) {
     return ctx.reply("❌ Enter a valid score (0-100)");
@@ -577,7 +577,7 @@ bot.on("text", async (ctx) => {
       filename: `GPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
     });
 
-    fs.unlinkSync(pdfPath); // Clean up PDF file
+    fs.unlinkSync(pdfPath);
   } catch (err) {
     console.error("PDF generation error:", err);
     await ctx.reply(
@@ -599,7 +599,7 @@ app.get("/health", (req, res) => {
 app.get("/", (req, res) => {
   res.send("Bot is running");
 });
-// Secure /logs route for ADMIN only
+
 app.get("/logs", async (req, res) => {
   const authHeader = req.headers.authorization;
 
@@ -611,7 +611,6 @@ app.get("/logs", async (req, res) => {
 
   const token = authHeader.split(" ")[1];
 
-  // Compare token to ADMIN_ID (in practice, you'd use a more secure token system)
   if (token !== ADMIN_ID) {
     return res.status(403).json({ error: "Forbidden: Invalid token" });
   }
