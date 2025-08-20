@@ -60,7 +60,7 @@ function getGradeByPoint(score) {
   if (score >= 0.0) return { letter: "FX", point: 0.0 };
   return { letter: "F", point: 0.0 };
 }
-let userStatus = {};
+let userStates = {};
 
 const calculatecGPA = (gpas_arr, userId) => {
   let usercGPA = {};
@@ -287,10 +287,9 @@ bot.start(async (ctx) => {
 });
 
 bot.hears("[NEW] Calculate cGPA", (ctx) => {
-  const userId = ctx.from.id;
+  const chatId = ctx.chat.id;
   sessions[chatId] = { index: 0, scores: [] };
-  userStates[userId] = { status: "calculating_cGPA", index: 0, gpas: [] };
-
+  userStates[chatId] = { status: "calculating_cGPA", index: 0, gpas: [] };
   return ctx.reply("Enter first semester GPA");
 });
 
