@@ -279,7 +279,8 @@ bot.start(async (ctx) => {
   await ctx.reply(
     "📘 Welcome to GPA Calculator!",
     Markup.keyboard([
-      ["🎓 Calculate GPA", "[NEW] Calculate cGPA"]["📜 My History"],
+      ["🎓 Calculate GPA", "[NEW] Calculate cGPA"],
+      ["📜 My History"],
       ["📢 About", "📬 Broadcast (Admin)"],
     ]).resize()
   );
