@@ -46,6 +46,29 @@ function getGrade(score) {
   return { letter: "F", point: 0.0 };
 }
 
+function getGradeByPoint(score) {
+  if (score > 4.0) return { letter: "A+", point: 4.0 };
+  if (score >= 4.0) return { letter: "A", point: 4.0 };
+  if (score >= 3.75) return { letter: "A-", point: 3.75 };
+  if (score >= 3.5) return { letter: "B+", point: 3.5 };
+  if (score >= 3.0) return { letter: "B", point: 3.0 };
+  if (score >= 2.75) return { letter: "B-", point: 2.75 };
+  if (score >= 2.5) return { letter: "C+", point: 2.5 };
+  if (score >= 2.0) return { letter: "C", point: 2.0 };
+  if (score >= 1.75) return { letter: "C-", point: 1.75 };
+  if (score >= 1.0) return { letter: "D", point: 1.0 };
+  if (score >= 0.0) return { letter: "FX", point: 0.0 };
+  return { letter: "F", point: 0.0 };
+}
+let userStatus = {};
+
+const calculatecGPA = (gpas_arr, userId) => {
+  let usercGPA = {};
+  let cGpa = parseFloat((gpas_arr[0] * 24 + gpas_arr[1] * 33) / (24 + 33));
+  usercGPA[userId] = { cGpa };
+  return usercGPA[userId].cGpa.toFixed(2);
+};
+
 async function generateQRCode(verificationData) {
   return new Promise((resolve, reject) => {
     const qrPath = path.join(__dirname, `qr_${Date.now()}.png`);
@@ -256,11 +279,18 @@ bot.start(async (ctx) => {
   await ctx.reply(
     "📘 Welcome to GPA Calculator!",
     Markup.keyboard([
-      ["🎓 Calculate GPA"],
-      ["📜 My History"],
+      [["🎓 Calculate GPA"], ["[NEW] Calculate cGPA"]]["📜 My History"],
       ["📢 About", "📬 Broadcast (Admin)"],
     ]).resize()
   );
+});
+
+bot.hears("[NEW] Calculate cGPA", (ctx) => {
+  const userId = ctx.from.id;
+  sessions[chatId] = { index: 0, scores: [] };
+  userStates[userId] = { status: "calculating_cGPA", index: 0, gpas: [] };
+
+  return ctx.reply("Enter first semester GPA");
 });
 
 bot.hears("🎓 Calculate GPA", (ctx) => {
@@ -389,6 +419,7 @@ bot.hears("📬 Broadcast (Admin)", async (ctx) => {
 
 bot.on("text", async (ctx) => {
   const chatId = ctx.chat.id;
+  const userId = ctx.from.id;
   const text = ctx.message.text.trim();
   const session = sessions[chatId];
   if (!session) return;
@@ -481,6 +512,27 @@ bot.on("text", async (ctx) => {
     );
   } finally {
     delete sessions[chatId];
+  }
+
+  if (!userStates[userId]) return;
+
+  let state = userStates[userId];
+
+  if (state.status === "calculating_cGPA" && state.index === 0) {
+    state.gpas.push(parseFloat(text));
+    ctx.reply("Enter second semester GPA");
+    //console.log("first semester " + text);
+    state.index = 1;
+  } else if (state.status === "calculating_cGPA" && state.index === 1) {
+    state.gpas.push(parseFloat(text));
+    const finalCgpa = calculatecGPA(state.gpas, userId);
+    const { letter } = getGradeByPoint(finalCgpa);
+    ctx.reply(`Your cGPA is: ${finalCgpa} \nGrade: ${letter}`);
+    //console.log("second semester " + text);
+    state.index = 2; // move forward
+    state.status = "done"; // end process
+  } else {
+    console.log("error in handling input for user " + userId);
   }
 });
 
