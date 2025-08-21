@@ -19,7 +19,7 @@ const db = admin.firestore();
 const logsRef = db.collection("logs");
 const usersRef = db.collection("users");
 
-const bot = new Telegraf(process.env.TEST_BOT_TOKEN);
+const bot = new Telegraf(process.env.BOT_TOKEN);
 const ADMIN_ID = process.env.ADMIN_ID;
 
 const courses = [
