@@ -19,7 +19,7 @@ const db = admin.firestore();
 const logsRef = db.collection("logs");
 const usersRef = db.collection("users");
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
+const bot = new Telegraf(process.env.TEST_BOT_TOKEN);
 const ADMIN_ID = process.env.ADMIN_ID;
 
 const courses = [
@@ -67,7 +67,8 @@ const sessions = {};
 
 const calculatecGPA = (gpas_arr, userId) => {
   let usercGPA = {};
-  let cGpa = parseFloat((gpas_arr[0] * 24 + gpas_arr[1] * 33) / (24 + 33));
+
+  let cGpa = parseFloat((gpas_arr[0] * 30 + gpas_arr[1] * 33) / (30 + 33));
   usercGPA[userId] = { cGpa };
   return usercGPA[userId].cGpa.toFixed(2);
 };
@@ -97,7 +98,16 @@ async function generateQRCode(verificationData) {
 async function generateGpaPdf(chatId, session, gpa, userFullName) {
   return new Promise(async (resolve, reject) => {
     try {
-      const doc = new PDFDocument({ margin: 50 });
+      const doc = new PDFDocument({
+        margin: 50,
+        size: "A4",
+        info: {
+          Title: "GPA Report",
+          Author: "Jimma University",
+          Subject: `GPA Report for ${userFullName}`,
+        },
+      });
+
       const filePath = path.join(__dirname, `gpa_${chatId}_${Date.now()}.pdf`);
       const stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
@@ -116,59 +126,147 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
       // Generate QR code
       const qrPath = await generateQRCode(verificationData);
 
+      // Add background color
+      doc.rect(0, 0, doc.page.width, 120).fill("#1a365d"); // Dark blue header
+
       // Add logo if exists
       const logoPath = path.join(__dirname, "logo.png");
       if (fs.existsSync(logoPath)) {
-        doc.image(logoPath, 230, 30, { width: 60 });
+        doc.image(logoPath, 50, 35, { width: 50 });
       }
 
-      doc.moveDown(6);
-      doc.fontSize(20).text("Jimma University", { align: "center" });
+      // Header text
+      doc.fillColor("white").fontSize(20).text("Jimma University", 110, 40);
+
+      // Warning text
       doc
-        .fontSize(10)
+        .fillColor("#e53e3e")
+        .fontSize(8)
         .text(
-          "THIS IS NOT OFFICIAL GRADE REPORT: THIS BOT IS DEVELOPED FOR EDUCATIONAL PURPOSE ONLY!!!!",
+          "THIS IS NOT AN OFFICIAL GRADE REPORT: FOR EDUCATIONAL PURPOSES ONLY",
+          50,
+          100,
           { align: "center" }
         );
-      doc.fontSize(16).text("GPA Result Report", { align: "center" });
-      doc.moveDown();
-      doc.fontSize(13).text(`Student: ${userFullName}`, { align: "center" });
-      doc
-        .fontSize(11)
-        .text(`Date: ${new Date().toLocaleDateString()}`, { align: "center" });
-      doc.moveDown(2);
 
+      // Reset color for main content
+      doc.fillColor("black");
+
+      // Title
+      doc.fontSize(16).text("GPA Result Report", 50, 140, { align: "center" });
+
+      // Student info section
+      doc.rect(50, 170, doc.page.width - 80, 60).fill("#ebf8ff");
+
+      doc
+        .fillColor("black")
+        .fontSize(12)
+        .text(`Student: ${userFullName}`, 60, 185);
+
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, 60, 205);
+
+      doc.text(`GPA: ${gpa.toFixed(2)}    `, 350, 185, { align: "right" });
+
+      doc.text(
+        `Verification ID: ${JSON.parse(verificationData).verificationId}    `,
+        350,
+        205,
+        { align: "right" }
+      );
+
+      // Table header
       const startX = 50;
-      let y = doc.y;
+      let y = 250;
 
       const colWidths = {
-        course: 360,
+        course: 270,
+        credit: 50,
         score: 50,
         grade: 50,
         point: 50,
       };
 
-      // Table header
-      doc.font("Helvetica-Bold").fontSize(11);
-      doc.text("Course", startX, y);
-      doc.text("Score", startX + colWidths.course, y);
-      doc.text("Grade", startX + colWidths.course + colWidths.score, y);
+      // Table header with background
+      doc.rect(startX, y, colWidths.course, 20).fill("#e6fffa");
+      doc
+        .rect(startX + colWidths.course, y, colWidths.credit, 20)
+        .fill("#e6fffa");
+      doc
+        .rect(
+          startX + colWidths.course + colWidths.credit,
+          y,
+          colWidths.score,
+          20
+        )
+        .fill("#e6fffa");
+      doc
+        .rect(
+          startX + colWidths.course + colWidths.credit + colWidths.score,
+          y,
+          colWidths.grade,
+          20
+        )
+        .fill("#e6fffa");
+      doc
+        .rect(
+          startX +
+            colWidths.course +
+            colWidths.credit +
+            colWidths.score +
+            colWidths.grade,
+          y,
+          colWidths.point,
+          20
+        )
+        .fill("#e6fffa");
+
+      doc.font("Helvetica-Bold").fontSize(10);
+      doc.fillColor("black");
+      doc.text("Course", startX + 5, y + 5);
+      doc.text("ECTS", startX + colWidths.course + 5, y + 5);
+      doc.text(
+        "Score",
+        startX + colWidths.course + colWidths.credit + 5,
+        y + 5
+      );
+      doc.text(
+        "Grade",
+        startX + colWidths.course + colWidths.credit + colWidths.score + 5,
+        y + 5
+      );
       doc.text(
         "Point",
-        startX + colWidths.course + colWidths.score + colWidths.grade,
-        y
+        startX +
+          colWidths.course +
+          colWidths.credit +
+          colWidths.score +
+          colWidths.grade +
+          5,
+        y + 5
       );
+
       y += 20;
+
+      // Draw header bottom border
       doc
-        .moveTo(startX, y - 5)
-        .lineTo(550, y - 5)
+        .moveTo(startX, y)
+        .lineTo(
+          startX +
+            colWidths.course +
+            colWidths.credit +
+            colWidths.score +
+            colWidths.grade +
+            colWidths.point,
+          y
+        )
         .stroke();
 
       let totalWeighted = 0,
         totalCredits = 0;
 
-      doc.font("Helvetica").fontSize(10);
+      doc.font("Helvetica").fontSize(9);
 
+      // Table rows with alternating background
       session.scores.forEach((score, i) => {
         const { letter, point } = getGrade(score);
         const course = courses[i];
@@ -176,52 +274,318 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
         totalWeighted += weighted;
         totalCredits += course.credit;
 
+        // Alternate row background
+        if (i % 2 === 0) {
+          doc
+            .rect(
+              startX,
+              y,
+              colWidths.course +
+                colWidths.credit +
+                colWidths.score +
+                colWidths.grade +
+                colWidths.point,
+              18
+            )
+            .fill("#f7fafc");
+        }
+
+        doc.fillColor("black");
         doc.text(
-          course.name.substring(0, 40) + (course.name.length > 40 ? "..." : ""),
-          startX,
-          y
+          course.name.substring(0, 30) + (course.name.length > 30 ? "..." : ""),
+          startX + 5,
+          y + 5
         );
-        doc.text(score.toString(), startX + colWidths.course, y);
-        doc.text(letter, startX + colWidths.course + colWidths.score, y);
         doc.text(
-          point.toFixed(2),
-          startX + colWidths.course + colWidths.score + colWidths.grade,
-          y
+          course.credit.toString(),
+          startX + colWidths.course + 5,
+          y + 5
+        );
+        doc.text(
+          score.toString(),
+          startX + colWidths.course + colWidths.credit + 5,
+          y + 5
+        );
+        doc.text(
+          letter,
+          startX + colWidths.course + colWidths.credit + colWidths.score + 5,
+          y + 5
+        );
+        doc.text(
+          point.toFixed(1),
+          startX +
+            colWidths.course +
+            colWidths.credit +
+            colWidths.score +
+            colWidths.grade +
+            5,
+          y + 5
         );
 
         y += 18;
+
+        // Draw row border
+        doc
+          .moveTo(startX, y)
+          .lineTo(
+            startX +
+              colWidths.course +
+              colWidths.credit +
+              colWidths.score +
+              colWidths.grade +
+              colWidths.point,
+            y
+          )
+          .strokeColor("#e2e8f0")
+          .stroke();
       });
 
-      doc.moveDown();
-      doc.moveTo(50, y).lineTo(550, y).stroke();
+      // Summary section
+      y += 20;
+      doc.rect(startX, y, 200, 60).fill("#f0fff4"); // Light green background
 
-      doc.moveDown(2);
-      doc
-        .fontSize(13)
-        .text(`Final GPA: ${gpa.toFixed(2)}`, { align: "center" });
+      doc.font("Helvetica-Bold").fontSize(12);
+      doc.fillColor("black");
+      doc.text("Summary", startX + 10, y + 10);
+
+      doc.font("Helvetica").fontSize(10);
+      doc.text(`Total Credits: ${totalCredits}`, startX + 10, y + 30);
 
       // Add QR code for verification
-      doc.moveDown(2);
-      doc.fontSize(10).text("Verification QR Code:", { align: "center" });
-      doc.image(qrPath, 200, doc.y, { width: 100 });
-      doc.moveDown(6);
-
-      doc
-        .fontSize(10)
-        .text("THIS IS UNOFFICIAL COPY OF RESULT", { align: "center" });
+      doc.image(qrPath, 350, y, { width: 80 });
       doc
         .fontSize(8)
-        .text(
-          `Verification ID: ${JSON.parse(verificationData).verificationId}`,
-          { align: "center" }
-        );
+        .text("Scan to verify", 350, y + 85, { width: 80, align: "center" });
 
       doc.end();
 
       stream.on("finish", () => {
         fs.unlinkSync(qrPath); // Clean up QR code image
+        console.log(`PDF generated successfully`);
         resolve(filePath);
       });
+
+      stream.on("error", reject);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+// CGPA PDF Generation Function
+async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const doc = new PDFDocument({
+        margin: 50,
+        size: "A4",
+        info: {
+          Title: "CGPA Report",
+          Author: "Jimma University",
+          Subject: `CGPA Report for ${userFullName}`,
+        },
+      });
+
+      const filePath = path.join(__dirname, `cgpa_${chatId}_${Date.now()}.pdf`);
+      const stream = fs.createWriteStream(filePath);
+      doc.pipe(stream);
+
+      // Generate verification data for QR code
+      const verificationData = JSON.stringify({
+        student: userFullName,
+        cgpa,
+        date: new Date().toISOString(),
+        verificationId: `JIU-${Math.random()
+          .toString(36)
+          .substring(2, 10)
+          .toUpperCase()}`,
+      });
+
+      // Generate QR code
+      const qrPath = await generateQRCode(verificationData);
+
+      // Add background color
+      doc.rect(0, 0, doc.page.width, 120).fill("#1a365d"); // Dark blue header
+
+      // Add logo if exists
+      const logoPath = path.join(__dirname, "logo.png");
+      if (fs.existsSync(logoPath)) {
+        doc.image(logoPath, 50, 35, { width: 50 });
+      }
+
+      // Header text
+      doc.fillColor("white").fontSize(20).text("Jimma University", 110, 40);
+
+      // Warning text
+      doc
+        .fillColor("#e53e3e")
+        .fontSize(8)
+        .text(
+          "THIS IS NOT AN OFFICIAL GRADE REPORT: FOR EDUCATIONAL PURPOSES ONLY",
+          50,
+          100,
+          { align: "center" }
+        );
+
+      // Reset color for main content
+      doc.fillColor("black");
+
+      // Title
+      doc.fontSize(16).text("CGPA Result Report", 50, 140, { align: "center" });
+
+      // Student info section
+      doc.rect(50, 170, doc.page.width - 100, 60).fill("#ebf8ff"); // Light blue background
+
+      doc
+        .fillColor("black")
+        .fontSize(12)
+        .text(`Student: ${userFullName}`, 60, 185);
+
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, 60, 205);
+
+      doc.text(`CGPA: ${cgpa}`, 350, 185, { align: "right" });
+
+      doc.text(
+        `Verification ID: ${JSON.parse(verificationData).verificationId}`,
+        350,
+        205,
+        { align: "right" }
+      );
+
+      // Table header
+      const startX = 50;
+      let y = 250;
+
+      const colWidths = {
+        semester: 250,
+        credits: 80,
+        gpa: 80,
+      };
+
+      // Table header with background
+      doc.rect(startX, y, colWidths.semester, 20).fill("#e6fffa");
+      doc
+        .rect(startX + colWidths.semester, y, colWidths.credits, 20)
+        .fill("#e6fffa");
+      doc
+        .rect(
+          startX + colWidths.semester + colWidths.credits,
+          y,
+          colWidths.gpa,
+          20
+        )
+        .fill("#e6fffa");
+      doc
+        .rect(
+          startX + colWidths.semester + colWidths.credits + colWidths.gpa,
+          y,
+          colWidths.points,
+          20
+        )
+        .fill("#e6fffa");
+
+      doc.font("Helvetica-Bold").fontSize(10);
+      doc.fillColor("black");
+      doc.text("Semester", startX + 5, y + 5);
+      doc.text("Credits", startX + colWidths.semester + 5, y + 5);
+      doc.text(
+        "GPA",
+        startX + colWidths.semester + colWidths.credits + 5,
+        y + 5
+      );
+
+      y += 20;
+
+      // Draw header bottom border
+      doc
+        .moveTo(startX, y)
+        .lineTo(
+          startX + colWidths.semester + colWidths.credits + colWidths.gpa + y
+        )
+        .stroke();
+
+      let totalCredits = 0;
+
+      doc.font("Helvetica").fontSize(10);
+
+      // Table rows with alternating background
+      semesters.forEach((semester, i) => {
+        const semesterPoints = semester.gpa * semester.credits;
+        totalCredits += semester.credits;
+
+        // Alternate row background
+        if (i % 2 === 0) {
+          doc
+            .rect(
+              startX,
+              y,
+              colWidths.semester + colWidths.credits + colWidths.gpa,
+              18
+            )
+            .fill("#f7fafc");
+        }
+
+        doc.fillColor("black");
+        doc.text(semester.semester, startX + 5, y + 5);
+        doc.text(
+          semester.credits.toString(),
+          startX + colWidths.semester + 5,
+          y + 5
+        );
+        doc.text(
+          semester.gpa.toFixed(2),
+          startX + colWidths.semester + colWidths.credits + 5,
+          y + 5
+        );
+        doc.text(
+          semesterPoints.toFixed(2),
+          startX + colWidths.semester + colWidths.credits + colWidths.gpa + 5,
+          y + 5
+        );
+
+        y += 18;
+
+        // Draw row border
+        doc
+          .moveTo(startX, y)
+          .lineTo(
+            startX + colWidths.semester + colWidths.credits + colWidths.gpa,
+            y
+          )
+          .strokeColor("#e2e8f0")
+          .stroke();
+      });
+
+      // Summary section
+      y += 20;
+      doc.rect(startX, y, 250, 80).fill("#f0fff4"); // Light green background
+
+      doc.font("Helvetica-Bold").fontSize(12);
+      doc.fillColor("black");
+      doc.text("CGPA Summary", startX + 10, y + 10);
+
+      doc.font("Helvetica").fontSize(10);
+      doc.text(`Total Credits: ${totalCredits}`, startX + 10, y + 30);
+      doc.text(`Cumulative GPA: ${cgpa}`, startX + 10, y + 60);
+
+      // Add QR code for verification
+      doc.image(qrPath, 350, y, { width: 80 });
+      doc
+        .fontSize(8)
+        .text("Scan to verify", 350, y + 85, { width: 80, align: "center" });
+
+      // Footer
+      y = doc.page.height - 50;
+      doc.rect(0, y, doc.page.width, 50).fill("#edf2f7");
+
+      doc.end();
+
+      stream.on("finish", () => {
+        fs.unlinkSync(qrPath); // Clean up QR code image
+        console.log(`CGPA PDF generated successfully`);
+        resolve(filePath);
+      });
+
       stream.on("error", reject);
     } catch (err) {
       reject(err);
@@ -461,7 +825,9 @@ bot.on("text", async (ctx) => {
   // Handle cGPA calculation first
   if (userStates[chatId] && userStates[chatId].status === "calculating_cGPA") {
     const state = userStates[chatId];
-
+    const userFullName = `${ctx.from.first_name || ""} ${
+      ctx.from.last_name || ""
+    }`.trim();
     if (state.index === 0) {
       const gpa = parseFloat(text);
       if (isNaN(gpa) || gpa < 0 || gpa > 4.0) {
@@ -472,14 +838,41 @@ bot.on("text", async (ctx) => {
       return ctx.reply("Enter second semester GPA");
     } else if (state.index === 1) {
       const gpa = parseFloat(text);
+
       if (isNaN(gpa) || gpa < 0 || gpa > 4.0) {
         return ctx.reply("❌ Enter a valid GPA (0.0-4.0)");
       }
       state.gpas.push(gpa);
       const finalCgpa = calculatecGPA(state.gpas, chatId);
+      const SemesterData = [
+        { semester: "First Semester", gpa: state.gpas[0], credits: 30 },
+        { semester: "Second Semester", gpa: state.gpas[1], credits: 33 },
+      ];
       const { letter } = getGradeByPoint(finalCgpa);
       await ctx.reply(`Your cGPA is: ${finalCgpa} \nGrade: ${letter}`);
       delete userStates[chatId];
+      const pdfPath = await generatecGpaPdf(
+        chatId,
+        SemesterData,
+        finalCgpa,
+        userFullName
+      );
+      try {
+        await ctx.replyWithDocument({
+          source: pdfPath,
+          filename: `cGPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
+        });
+
+        fs.unlinkSync(pdfPath);
+      } catch (err) {
+        console.error("PDF generation error:", err);
+        await ctx.reply(
+          "⚠️ Error generating PDF. Here are your results:\n\n" + resultText
+        );
+      } finally {
+        delete sessions[chatId];
+      }
+
       return;
     }
   }

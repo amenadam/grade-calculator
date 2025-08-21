@@ -3,3 +3,4 @@ logs.json
 node_modules/
 firebaseKey.json
 test.js
+pdf.js
