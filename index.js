@@ -479,7 +479,7 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
         .rect(
           startX + colWidths.semester + colWidths.credits + colWidths.gpa,
           y,
-          colWidths.points,
+
           20
         )
         .fill("#e6fffa");
