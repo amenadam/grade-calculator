@@ -560,22 +560,30 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
   });
 }
 
-async function logUserCalculation(chatId, session, gpa, type = "GPA") {
+async function logUserCalculation(chatId, data, gpa, type = "GPA") {
   const verificationId = `JIU-${Math.random()
     .toString(36)
     .substring(2, 10)
     .toUpperCase()}`;
 
-  await logsRef.add({
+  // Extract user information based on whether it's from session or userState
+  const studentName =
+    data.userFirstName && data.userLastName
+      ? `${data.userFirstName || ""} ${data.userLastName || ""}`.trim()
+      : "Unknown Student";
+
+  const logData = {
     userId: chatId,
-    studentName: `${session.userFirstName || ""} ${
-      session.userLastName || ""
-    }`.trim(),
+    studentName,
     timestamp: new Date().toISOString(),
-    gpa: gpa.toFixed(2),
+    gpa: parseFloat(gpa).toFixed(2),
     verificationId,
     type,
-    results: session.scores.map((score, i) => {
+  };
+
+  // Only add results for GPA calculations (not cGPA)
+  if (type === "GPA" && data.scores) {
+    logData.results = data.scores.map((score, i) => {
       const grade = getGrade(score);
       return {
         course: courses[i].name,
@@ -584,8 +592,13 @@ async function logUserCalculation(chatId, session, gpa, type = "GPA") {
         grade: grade.letter,
         point: grade.point,
       };
-    }),
-  });
+    });
+  } else if (type === "CGPA" && data.gpas) {
+    // For cGPA, store the semester GPAs instead
+    logData.semesterGpas = data.gpas;
+  }
+
+  await logsRef.add(logData);
 
   return verificationId;
 }
@@ -665,7 +678,13 @@ bot.hears("🔍 Verify Result", (ctx) => {
 
 bot.hears("[NEW] Calculate cGPA", (ctx) => {
   const chatId = ctx.chat.id;
-  userStates[chatId] = { status: "calculating_cGPA", index: 0, gpas: [] };
+  userStates[chatId] = {
+    status: "calculating_cGPA",
+    index: 0,
+    gpas: [],
+    userFirstName: ctx.from.first_name || "",
+    userLastName: ctx.from.last_name || "",
+  };
   return ctx.reply("Enter first semester GPA:");
 });
 
@@ -789,7 +808,7 @@ bot.hears("📬 Broadcast (Admin)", async (ctx) => {
 bot.on("text", async (ctx) => {
   const chatId = ctx.chat.id;
   const text = ctx.message.text.trim();
-
+  const session = sessions[chatId];
   // Handle cGPA calculation
   if (userStates[chatId] && userStates[chatId].status === "calculating_cGPA") {
     const state = userStates[chatId];
@@ -817,19 +836,14 @@ bot.on("text", async (ctx) => {
         { semester: "Second Semester", gpa: state.gpas[1], credits: 33 },
       ];
 
-      // Create mock session for logging
-      const mockSession = {
-        scores: [],
-        userFirstName: ctx.from.first_name || "",
-        userLastName: ctx.from.last_name || "",
-      };
-
+      // FIX: Pass the state object instead of session
       const verificationId = await logUserCalculation(
         chatId,
-        mockSession,
+        state, // Changed from session to state
         finalCgpa,
         "CGPA"
       );
+
       await ctx.reply(
         `Your cGPA is: ${finalCgpa} \nGrade: ${letter}\n🔍 Verification ID: ${verificationId}`
       );
@@ -840,6 +854,7 @@ bot.on("text", async (ctx) => {
         finalCgpa,
         userFullName
       );
+
       try {
         await ctx.replyWithDocument({
           source: pdfPath,
@@ -856,7 +871,6 @@ bot.on("text", async (ctx) => {
     }
   }
 
-  const session = sessions[chatId];
   if (!session) return;
 
   if (session.mode === "broadcast") {
