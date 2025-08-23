@@ -12,6 +12,34 @@ const botVersion = version;
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Manual CORS middleware
+app.use((req, res, next) => {
+  // Update your CORS configuration to include your verification page
+  const allowedOrigins = [
+    "https://amenadamsolomon.rf.gd",
+    "https://telegram.org",
+    "http://localhost:3000", // Add for local testing
+  ];
+  const origin = req.headers.origin;
+
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
+  next();
+});
+
+app.use(express.json());
+
+// Initialize Firebase
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG_JSON);
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 
@@ -67,7 +95,6 @@ const sessions = {};
 
 const calculatecGPA = (gpas_arr, userId) => {
   let usercGPA = {};
-
   let cGpa = parseFloat((gpas_arr[0] * 30 + gpas_arr[1] * 33) / (30 + 33));
   usercGPA[userId] = { cGpa };
   return usercGPA[userId].cGpa.toFixed(2);
@@ -112,22 +139,17 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
       const stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
 
-      // Generate verification data for QR code
-      const verificationData = JSON.stringify({
-        student: userFullName,
-        gpa: gpa.toFixed(2),
-        date: new Date().toISOString(),
-        verificationId: `JIU-${Math.random()
-          .toString(36)
-          .substring(2, 10)
-          .toUpperCase()}`,
-      });
+      // Generate verification ID
+      const verificationId = `JIU-${Math.random()
+        .toString(36)
+        .substring(2, 10)
+        .toUpperCase()}`;
 
       // Generate QR code
-      const qrPath = await generateQRCode(verificationData);
+      const qrPath = await generateQRCode(verificationId);
 
       // Add background color
-      doc.rect(0, 0, doc.page.width, 120).fill("#1a365d"); // Dark blue header
+      doc.rect(0, 0, doc.page.width, 120).fill("#1a365d");
 
       // Add logo if exists
       const logoPath = path.join(__dirname, "logo.png");
@@ -162,17 +184,11 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
         .fillColor("black")
         .fontSize(12)
         .text(`Student: ${userFullName}`, 60, 185);
-
       doc.text(`Date: ${new Date().toLocaleDateString()}`, 60, 205);
-
       doc.text(`GPA: ${gpa.toFixed(2)}    `, 350, 185, { align: "right" });
-
-      doc.text(
-        `Verification ID: ${JSON.parse(verificationData).verificationId}    `,
-        350,
-        205,
-        { align: "right" }
-      );
+      doc.text(`Verification ID: ${verificationId}    `, 350, 205, {
+        align: "right",
+      });
 
       // Table header
       const startX = 50;
@@ -263,10 +279,9 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
 
       let totalWeighted = 0,
         totalCredits = 0;
-
       doc.font("Helvetica").fontSize(9);
 
-      // Table rows with alternating background
+      // Table rows
       session.scores.forEach((score, i) => {
         const { letter, point } = getGrade(score);
         const course = courses[i];
@@ -274,7 +289,6 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
         totalWeighted += weighted;
         totalCredits += course.credit;
 
-        // Alternate row background
         if (i % 2 === 0) {
           doc
             .rect(
@@ -323,8 +337,6 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
         );
 
         y += 18;
-
-        // Draw row border
         doc
           .moveTo(startX, y)
           .lineTo(
@@ -342,16 +354,14 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
 
       // Summary section
       y += 20;
-      doc.rect(startX, y, 200, 60).fill("#f0fff4"); // Light green background
-
+      doc.rect(startX, y, 200, 60).fill("#f0fff4");
       doc.font("Helvetica-Bold").fontSize(12);
       doc.fillColor("black");
       doc.text("Summary", startX + 10, y + 10);
-
       doc.font("Helvetica").fontSize(10);
       doc.text(`Total Credits: ${totalCredits}`, startX + 10, y + 30);
 
-      // Add QR code for verification
+      // Add QR code
       doc.image(qrPath, 350, y, { width: 80 });
       doc
         .fontSize(8)
@@ -360,8 +370,7 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
       doc.end();
 
       stream.on("finish", () => {
-        fs.unlinkSync(qrPath); // Clean up QR code image
-        console.log(`PDF generated successfully`);
+        fs.unlinkSync(qrPath);
         resolve(filePath);
       });
 
@@ -372,7 +381,6 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
   });
 }
 
-// CGPA PDF Generation Function
 async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
   return new Promise(async (resolve, reject) => {
     try {
@@ -390,22 +398,17 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
       const stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
 
-      // Generate verification data for QR code
-      const verificationData = JSON.stringify({
-        student: userFullName,
-        cgpa,
-        date: new Date().toISOString(),
-        verificationId: `JIU-${Math.random()
-          .toString(36)
-          .substring(2, 10)
-          .toUpperCase()}`,
-      });
+      // Generate verification ID
+      const verificationId = `JIU-${Math.random()
+        .toString(36)
+        .substring(2, 10)
+        .toUpperCase()}`;
 
       // Generate QR code
-      const qrPath = await generateQRCode(verificationData);
+      const qrPath = await generateQRCode(verificationId);
 
       // Add background color
-      doc.rect(0, 0, doc.page.width, 120).fill("#1a365d"); // Dark blue header
+      doc.rect(0, 0, doc.page.width, 120).fill("#1a365d");
 
       // Add logo if exists
       const logoPath = path.join(__dirname, "logo.png");
@@ -434,23 +437,17 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
       doc.fontSize(16).text("CGPA Result Report", 50, 140, { align: "center" });
 
       // Student info section
-      doc.rect(50, 170, doc.page.width - 100, 60).fill("#ebf8ff"); // Light blue background
+      doc.rect(50, 170, doc.page.width - 100, 60).fill("#ebf8ff");
 
       doc
         .fillColor("black")
         .fontSize(12)
         .text(`Student: ${userFullName}`, 60, 185);
-
       doc.text(`Date: ${new Date().toLocaleDateString()}`, 60, 205);
-
       doc.text(`CGPA: ${cgpa}`, 350, 185, { align: "right" });
-
-      doc.text(
-        `Verification ID: ${JSON.parse(verificationData).verificationId}`,
-        350,
-        205,
-        { align: "right" }
-      );
+      doc.text(`Verification ID: ${verificationId}`, 350, 205, {
+        align: "right",
+      });
 
       // Table header
       const startX = 50;
@@ -498,14 +495,12 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
         .stroke();
 
       let totalCredits = 0;
-
       doc.font("Helvetica").fontSize(10);
 
-      // Table rows with alternating background
+      // Table rows
       semesters.forEach((semester, i) => {
         totalCredits += semester.credits;
 
-        // Alternate row background
         if (i % 2 === 0) {
           doc.rect(startX, y, totalTableWidth, 18).fill("#f7fafc");
         }
@@ -524,8 +519,6 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
         );
 
         y += 18;
-
-        // Draw row border
         doc
           .moveTo(startX, y)
           .lineTo(startX + totalTableWidth, y)
@@ -535,17 +528,15 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
 
       // Summary section
       y += 20;
-      doc.rect(startX, y, 250, 80).fill("#f0fff4"); // Light green background
-
+      doc.rect(startX, y, 250, 80).fill("#f0fff4");
       doc.font("Helvetica-Bold").fontSize(12);
       doc.fillColor("black");
       doc.text("CGPA Summary", startX + 10, y + 10);
-
       doc.font("Helvetica").fontSize(10);
       doc.text(`Total Credits: ${totalCredits}`, startX + 10, y + 30);
       doc.text(`Cumulative GPA: ${cgpa}`, startX + 10, y + 60);
 
-      // Add QR code for verification
+      // Add QR code
       doc.image(qrPath, 350, y, { width: 80 });
       doc
         .fontSize(8)
@@ -558,8 +549,7 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
       doc.end();
 
       stream.on("finish", () => {
-        fs.unlinkSync(qrPath); // Clean up QR code image
-        console.log(`CGPA PDF generated successfully: ${filePath}`);
+        fs.unlinkSync(qrPath);
         resolve(filePath);
       });
 
@@ -570,11 +560,21 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
   });
 }
 
-async function logUserCalculation(chatId, session, gpa) {
+async function logUserCalculation(chatId, session, gpa, type = "GPA") {
+  const verificationId = `JIU-${Math.random()
+    .toString(36)
+    .substring(2, 10)
+    .toUpperCase()}`;
+
   await logsRef.add({
     userId: chatId,
+    studentName: `${session.userFirstName || ""} ${
+      session.userLastName || ""
+    }`.trim(),
     timestamp: new Date().toISOString(),
     gpa: gpa.toFixed(2),
+    verificationId,
+    type,
     results: session.scores.map((score, i) => {
       const grade = getGrade(score);
       return {
@@ -586,16 +586,16 @@ async function logUserCalculation(chatId, session, gpa) {
       };
     }),
   });
+
+  return verificationId;
 }
 
 function replaceMacros(message, macros = {}) {
   let processedMessage = message;
-
   for (const [key, value] of Object.entries(macros)) {
     const regex = new RegExp(`{{${key}}}`, "gi");
     processedMessage = processedMessage.replace(regex, value);
   }
-
   return processedMessage;
 }
 
@@ -623,6 +623,7 @@ bot.use(async (ctx, next) => {
 bot.start(async (ctx) => {
   const chatId = ctx.chat.id;
   const user = ctx.from;
+
   if (ADMIN_ID && ADMIN_ID !== chatId.toString()) {
     try {
       await bot.telegram.sendMessage(
@@ -635,11 +636,12 @@ bot.start(async (ctx) => {
       console.error("Error notifying admin:", err);
     }
   }
+
   await ctx.reply(
     "📘 Welcome to GPA Calculator!",
     Markup.keyboard([
       ["🎓 Calculate GPA", "[NEW] Calculate cGPA"],
-      ["📜 My History"],
+      ["📜 My History", "🔍 Verify Result"],
       ["📢 About", "📬 Broadcast (Admin)"],
     ]).resize()
   );
@@ -651,15 +653,30 @@ bot.help((ctx) => {
   );
 });
 
+bot.hears("🔍 Verify Result", (ctx) => {
+  const miniAppUrl = `https://amenadamsolomon.rf.gd/verify.html`;
+  return ctx.reply(
+    "Verify your GPA results:",
+    Markup.inlineKeyboard([
+      Markup.button.webApp("🔍 Open Verifier", miniAppUrl),
+    ])
+  );
+});
+
 bot.hears("[NEW] Calculate cGPA", (ctx) => {
   const chatId = ctx.chat.id;
   userStates[chatId] = { status: "calculating_cGPA", index: 0, gpas: [] };
-  return ctx.reply("Enter first semester GPA");
+  return ctx.reply("Enter first semester GPA:");
 });
 
 bot.hears("🎓 Calculate GPA", (ctx) => {
   const chatId = ctx.chat.id;
-  sessions[chatId] = { index: 0, scores: [] };
+  sessions[chatId] = {
+    index: 0,
+    scores: [],
+    userFirstName: ctx.from.first_name || "",
+    userLastName: ctx.from.last_name || "",
+  };
   return ctx.reply(`Send your score for: ${courses[0].name}`);
 });
 
@@ -679,10 +696,8 @@ bot.hears("📜 My History", async (ctx) => {
     const gpa = data.gpa;
     const docId = doc.id;
 
-    const message = `📅 ${date}\n🎯 GPA: *${gpa}*\nTap below to view full details.`;
-
     await ctx.replyWithMarkdown(
-      message,
+      `📅 ${date}\n🎯 GPA: *${gpa}*`,
       Markup.inlineKeyboard([
         Markup.button.callback("🔍 View Details", `viewlog_${docId}`),
       ])
@@ -698,16 +713,12 @@ bot.hears("📢 About", (ctx) => {
 
 bot.hears("logs", async (ctx) => {
   const chatId = ctx.chat.id.toString();
-  if (chatId !== ADMIN_ID) {
+  if (chatId !== ADMIN_ID)
     return ctx.reply("🚫 You are not authorized to access logs.");
-  }
 
   try {
     const snapshot = await logsRef.orderBy("timestamp", "desc").limit(10).get();
-
-    if (snapshot.empty) {
-      return ctx.reply("📭 No logs found.");
-    }
+    if (snapshot.empty) return ctx.reply("📭 No logs found.");
 
     for (const doc of snapshot.docs) {
       const data = doc.data();
@@ -716,10 +727,8 @@ bot.hears("logs", async (ctx) => {
       const userId = data.userId;
       const docId = doc.id;
 
-      const message = `🧾 Log for 🧑‍🎓 ID: ${userId}\n📅 ${date}\n🎯 GPA: *${gpa}*\nTap below to view full details.`;
-
       await ctx.replyWithMarkdown(
-        message,
+        `🧾 Log for 🧑‍🎓 ID: ${userId}\n📅 ${date}\n🎯 GPA: *${gpa}*`,
         Markup.inlineKeyboard([
           Markup.button.callback("🔍 View Details", `viewlog_${docId}`),
         ])
@@ -732,21 +741,13 @@ bot.hears("logs", async (ctx) => {
 });
 
 bot.on("callback_query", async (ctx) => {
-  const chatId = ctx.chat.id.toString();
   const callbackData = ctx.callbackQuery.data;
-
-  if (!callbackData.startsWith("viewlog_")) {
-    return ctx.answerCbQuery();
-  }
+  if (!callbackData.startsWith("viewlog_")) return ctx.answerCbQuery();
 
   const docId = callbackData.split("_")[1];
-
   try {
     const doc = await logsRef.doc(docId).get();
-
-    if (!doc.exists) {
-      return ctx.answerCbQuery("❌ Log not found");
-    }
+    if (!doc.exists) return ctx.answerCbQuery("❌ Log not found");
 
     const data = doc.data();
     const date = new Date(data.timestamp).toLocaleString();
@@ -754,12 +755,14 @@ bot.on("callback_query", async (ctx) => {
     const userId = data.userId.toString();
     const results = data.results;
 
-    if (chatId !== ADMIN_ID && chatId !== userId) {
+    if (
+      ctx.chat.id.toString() !== ADMIN_ID &&
+      ctx.chat.id.toString() !== userId
+    ) {
       return ctx.answerCbQuery("🚫 You are not authorized to view this log");
     }
 
     let message = `📘 *Detailed GPA Log*\n🧑‍🎓 User ID: ${userId}\n📅 Date: ${date}\n🎯 GPA: *${gpa}*\n\n`;
-
     results.forEach((r, i) => {
       message += `${i + 1}. ${r.course}\nScore: ${r.score} → ${r.grade} (${
         r.point
@@ -778,19 +781,7 @@ bot.hears("📬 Broadcast (Admin)", async (ctx) => {
   const chatId = ctx.chat.id;
   if (chatId.toString() !== ADMIN_ID) return ctx.reply("🚫 Not authorized.");
 
-  const macroList = `
-📨 Send your broadcast message with these macros:
-
-• {{VERSION}} - Bot version (${botVersion})
-• {{DATE}} - Current date
-• {{TIME}} - Current time  
-• {{DATETIME}} - Date and time
-• {{BOT_NAME}} - Bot's name
-• {{ADMIN}} - Your name
-
-Example: "Hello! This is {{BOT_NAME}} v{{VERSION}} sending a message on {{DATETIME}}"
-  `.trim();
-
+  const macroList = `📨 Send your broadcast message with these macros:\n\n• {{VERSION}} - Bot version (${botVersion})\n• {{DATE}} - Current date\n• {{TIME}} - Current time\n• {{DATETIME}} - Date and time\n• {{BOT_NAME}} - Bot's name\n• {{ADMIN}} - Your name\n\nExample: "Hello! This is {{BOT_NAME}} v{{VERSION}} sending a message on {{DATETIME}}"`;
   ctx.reply(macroList);
   sessions[chatId] = { mode: "broadcast" };
 });
@@ -799,35 +790,50 @@ bot.on("text", async (ctx) => {
   const chatId = ctx.chat.id;
   const text = ctx.message.text.trim();
 
-  // Handle cGPA calculation first
+  // Handle cGPA calculation
   if (userStates[chatId] && userStates[chatId].status === "calculating_cGPA") {
     const state = userStates[chatId];
     const userFullName = `${ctx.from.first_name || ""} ${
       ctx.from.last_name || ""
     }`.trim();
+
     if (state.index === 0) {
       const gpa = parseFloat(text);
-      if (isNaN(gpa) || gpa < 0 || gpa > 4.0) {
+      if (isNaN(gpa) || gpa < 0 || gpa > 4.0)
         return ctx.reply("❌ Enter a valid GPA (0.0-4.0)");
-      }
       state.gpas.push(gpa);
       state.index = 1;
-      return ctx.reply("Enter second semester GPA");
+      return ctx.reply("Enter second semester GPA:");
     } else if (state.index === 1) {
       const gpa = parseFloat(text);
-
-      if (isNaN(gpa) || gpa < 0 || gpa > 4.0) {
+      if (isNaN(gpa) || gpa < 0 || gpa > 4.0)
         return ctx.reply("❌ Enter a valid GPA (0.0-4.0)");
-      }
+
       state.gpas.push(gpa);
       const finalCgpa = calculatecGPA(state.gpas, chatId);
+      const { letter } = getGradeByPoint(finalCgpa);
       const SemesterData = [
         { semester: "First Semester", gpa: state.gpas[0], credits: 30 },
         { semester: "Second Semester", gpa: state.gpas[1], credits: 33 },
       ];
-      const { letter } = getGradeByPoint(finalCgpa);
-      await ctx.reply(`Your cGPA is: ${finalCgpa} \nGrade: ${letter}`);
-      delete userStates[chatId];
+
+      // Create mock session for logging
+      const mockSession = {
+        scores: [],
+        userFirstName: ctx.from.first_name || "",
+        userLastName: ctx.from.last_name || "",
+      };
+
+      const verificationId = await logUserCalculation(
+        chatId,
+        mockSession,
+        finalCgpa,
+        "CGPA"
+      );
+      await ctx.reply(
+        `Your cGPA is: ${finalCgpa} \nGrade: ${letter}\n🔍 Verification ID: ${verificationId}`
+      );
+
       const pdfPath = await generatecGpaPdf(
         chatId,
         SemesterData,
@@ -839,17 +845,13 @@ bot.on("text", async (ctx) => {
           source: pdfPath,
           filename: `cGPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
         });
-
         fs.unlinkSync(pdfPath);
       } catch (err) {
         console.error("PDF generation error:", err);
-        await ctx.reply(
-          "⚠️ Error generating PDF. Here are your results:\n\n" + resultText
-        );
+        await ctx.reply("⚠️ Error generating PDF. Your cGPA is still saved.");
       } finally {
-        delete sessions[chatId];
+        delete userStates[chatId];
       }
-
       return;
     }
   }
@@ -868,25 +870,19 @@ bot.on("text", async (ctx) => {
     };
 
     const broadcastMessage = replaceMacros(text, macros);
-
     const logsSnapshot = await logsRef.get();
     const uniqueUserIds = new Set();
 
-    logsSnapshot.forEach((doc) => {
-      uniqueUserIds.add(doc.data().userId);
-    });
+    logsSnapshot.forEach((doc) => uniqueUserIds.add(doc.data().userId));
 
     let success = 0,
       failed = 0;
-    const userIds = Array.from(uniqueUserIds);
-
-    for (const userId of userIds) {
+    for (const userId of Array.from(uniqueUserIds)) {
       try {
         await ctx.telegram.sendMessage(userId, broadcastMessage);
         success++;
         await new Promise((resolve) => setTimeout(resolve, 200));
       } catch (err) {
-        console.error(`Failed to send to ${userId}:`, err.message);
         failed++;
       }
     }
@@ -894,23 +890,20 @@ bot.on("text", async (ctx) => {
     await ctx.reply(
       `📊 Broadcast Results:\n✅ Sent: ${success}\n❌ Failed: ${failed}`
     );
-
     delete sessions[chatId];
     return;
   }
 
   // Handle GPA calculation
   const score = parseFloat(text);
-  if (isNaN(score) || score < 0 || score > 100) {
+  if (isNaN(score) || score < 0 || score > 100)
     return ctx.reply("❌ Enter a valid score (0-100)");
-  }
 
   session.scores.push(score);
   session.index++;
 
-  if (session.index < courses.length) {
+  if (session.index < courses.length)
     return ctx.reply(`Next score for: ${courses[session.index].name}`);
-  }
 
   let totalWeighted = 0,
     totalCredits = 0;
@@ -928,8 +921,7 @@ bot.on("text", async (ctx) => {
   });
 
   const gpa = totalWeighted / totalCredits;
-  await logUserCalculation(chatId, session, gpa);
-
+  const verificationId = await logUserCalculation(chatId, session, gpa);
   const userFullName = `${ctx.from.first_name || ""} ${
     ctx.from.last_name || ""
   }`.trim();
@@ -938,7 +930,7 @@ bot.on("text", async (ctx) => {
     await ctx.reply(
       `${resultText}\n🎯 Final GPA: ${gpa.toFixed(
         2
-      )}\n\n📄 Generating PDF report...`
+      )}\n🔍 Verification ID: ${verificationId}\n\n📄 Generating PDF report...`
     );
 
     const pdfPath = await generateGpaPdf(chatId, session, gpa, userFullName);
@@ -946,7 +938,6 @@ bot.on("text", async (ctx) => {
       source: pdfPath,
       filename: `GPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
     });
-
     fs.unlinkSync(pdfPath);
   } catch (err) {
     console.error("PDF generation error:", err);
@@ -955,6 +946,35 @@ bot.on("text", async (ctx) => {
     );
   } finally {
     delete sessions[chatId];
+  }
+});
+
+app.get("/", (req, res) => {
+  res.send("Bot is running");
+});
+
+app.get("/logs", async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res
+      .status(401)
+      .json({ error: "Unauthorized: Missing Bearer token" });
+  }
+
+  const token = authHeader.split(" ")[1];
+  if (token !== ADMIN_ID)
+    return res.status(403).json({ error: "Forbidden: Invalid token" });
+
+  try {
+    const snapshot = await logsRef
+      .orderBy("timestamp", "desc")
+      .limit(100)
+      .get();
+    const logs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    return res.status(200).json({ count: logs.length, logs });
+  } catch (err) {
+    console.error("Error fetching logs:", err);
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
@@ -970,39 +990,36 @@ app.get("/", (req, res) => {
   res.send("Bot is running");
 });
 
-app.get("/logs", async (req, res) => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res
-      .status(401)
-      .json({ error: "Unauthorized: Missing Bearer token" });
-  }
-
-  const token = authHeader.split(" ")[1];
-
-  if (token !== ADMIN_ID) {
-    return res.status(403).json({ error: "Forbidden: Invalid token" });
-  }
-
+app.post("/api/verify", async (req, res) => {
   try {
-    const snapshot = await logsRef
-      .orderBy("timestamp", "desc")
-      .limit(100)
+    const { verificationId } = req.body;
+    if (!verificationId) {
+      return res
+        .status(400)
+        .json({ valid: false, error: "Verification ID required" });
+    }
+
+    const logsSnapshot = await logsRef
+      .where("verificationId", "==", verificationId)
+      .limit(1)
       .get();
-    const logs = [];
 
-    snapshot.forEach((doc) => {
-      logs.push({ id: doc.id, ...doc.data() });
-    });
+    if (logsSnapshot.empty) {
+      return res.json({ valid: false });
+    }
 
-    return res.status(200).json({
-      count: logs.length,
-      logs,
+    const logData = logsSnapshot.docs[0].data();
+    res.json({
+      valid: true,
+      student: logData.studentName,
+      gpa: logData.gpa,
+      date: logData.timestamp,
+      type: logData.type || "GPA",
+      results: logData.results,
     });
-  } catch (err) {
-    console.error("Error fetching logs:", err);
-    return res.status(500).json({ error: "Internal Server Error" });
+  } catch (error) {
+    console.error("Verification error:", error);
+    res.status(500).json({ valid: false, error: "Server error" });
   }
 });
 
