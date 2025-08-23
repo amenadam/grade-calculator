@@ -457,10 +457,13 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
       let y = 250;
 
       const colWidths = {
-        semester: 250,
-        credits: 80,
-        gpa: 80,
+        semester: 300,
+        credits: 100,
+        gpa: 100,
       };
+
+      const totalTableWidth =
+        colWidths.semester + colWidths.credits + colWidths.gpa;
 
       // Table header with background
       doc.rect(startX, y, colWidths.semester, 20).fill("#e6fffa");
@@ -472,14 +475,6 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
           startX + colWidths.semester + colWidths.credits,
           y,
           colWidths.gpa,
-          20
-        )
-        .fill("#e6fffa");
-      doc
-        .rect(
-          startX + colWidths.semester + colWidths.credits + colWidths.gpa,
-          y,
-
           20
         )
         .fill("#e6fffa");
@@ -499,9 +494,7 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
       // Draw header bottom border
       doc
         .moveTo(startX, y)
-        .lineTo(
-          startX + colWidths.semester + colWidths.credits + colWidths.gpa + y
-        )
+        .lineTo(startX + totalTableWidth, y)
         .stroke();
 
       let totalCredits = 0;
@@ -510,19 +503,11 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
 
       // Table rows with alternating background
       semesters.forEach((semester, i) => {
-        const semesterPoints = semester.gpa * semester.credits;
         totalCredits += semester.credits;
 
         // Alternate row background
         if (i % 2 === 0) {
-          doc
-            .rect(
-              startX,
-              y,
-              colWidths.semester + colWidths.credits + colWidths.gpa,
-              18
-            )
-            .fill("#f7fafc");
+          doc.rect(startX, y, totalTableWidth, 18).fill("#f7fafc");
         }
 
         doc.fillColor("black");
@@ -537,21 +522,13 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
           startX + colWidths.semester + colWidths.credits + 5,
           y + 5
         );
-        doc.text(
-          semesterPoints.toFixed(2),
-          startX + colWidths.semester + colWidths.credits + colWidths.gpa + 5,
-          y + 5
-        );
 
         y += 18;
 
         // Draw row border
         doc
           .moveTo(startX, y)
-          .lineTo(
-            startX + colWidths.semester + colWidths.credits + colWidths.gpa,
-            y
-          )
+          .lineTo(startX + totalTableWidth, y)
           .strokeColor("#e2e8f0")
           .stroke();
       });
@@ -582,7 +559,7 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
 
       stream.on("finish", () => {
         fs.unlinkSync(qrPath); // Clean up QR code image
-        console.log(`CGPA PDF generated successfully`);
+        console.log(`CGPA PDF generated successfully: ${filePath}`);
         resolve(filePath);
       });
 
