@@ -34,10 +34,14 @@
 
       .input-group {
         margin-bottom: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
       }
 
       input {
-        width: 100%;
+        width: 90%;
         padding: 15px;
         border: none;
         border-radius: 10px;
@@ -113,6 +117,10 @@
       tg.expand();
       tg.enableClosingConfirmation();
 
+      // Define your backend URL
+      const BACKEND_URL =
+        "https://victorious-adventure-production.up.railway.app";
+
       async function verifyResult() {
         const verificationId = document
           .getElementById("verificationId")
@@ -129,8 +137,13 @@
         }
 
         try {
-          // Send verification request to your backend
-          const response = await fetch("/api/verify", {
+          // Show loading state
+          resultText.innerHTML = "⏳ Verifying...";
+          resultDetails.innerHTML = "";
+          resultDiv.style.display = "block";
+
+          // Send verification request to your backend with correct URL
+          const response = await fetch(`${BACKEND_URL}/api/verify`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -138,17 +151,21 @@
             body: JSON.stringify({ verificationId }),
           });
 
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
           const data = await response.json();
 
           if (data.valid) {
             resultText.innerHTML =
               '<span class="verified">✅ Verified Successfully</span>';
             resultDetails.innerHTML = `
-                        Student: ${data.student}<br>
-                        GPA: ${data.gpa}<br>
-                        Date: ${new Date(data.date).toLocaleDateString()}<br>
-                        Type: ${data.type}
-                    `;
+              Student: ${data.student}<br>
+              GPA: ${data.gpa}<br>
+              Date: ${new Date(data.date).toLocaleDateString()}<br>
+              Type: ${data.type}
+            `;
           } else {
             resultText.innerHTML =
               '<span class="invalid">❌ Invalid Verification ID</span>';
@@ -156,10 +173,12 @@
               "This verification ID does not exist or has been tampered with.";
           }
         } catch (error) {
+          console.error("Verification error:", error);
           resultText.innerHTML =
             '<span class="invalid">❌ Verification Failed</span>';
           resultDetails.innerHTML =
-            "Please check your connection and try again.";
+            "Please check your connection and try again. Error: " +
+            error.message;
         }
 
         resultDiv.style.display = "block";
