@@ -1,16 +1,15 @@
-require("dotenv").config();
 const express = require("express");
 const { Telegraf, Markup } = require("telegraf");
 const admin = require("firebase-admin");
-const PDFDocument = require("pdfkit");
-const fs = require("fs");
-const path = require("path");
-const QRCode = require("qrcode");
+//const PDFDocument = require("pdfkit");
+//const fs = require("fs");
+//const path = require("path");
+//const QRCode = require("qrcode");
 
 const { version } = require("./package.json");
 const botVersion = version;
 const app = express();
-const port = process.env.PORT || 3000;
+//const port = process.env.PORT || 3000;
 
 // Manual CORS middleware
 app.use((req, res, next) => {
@@ -99,7 +98,7 @@ const calculatecGPA = (gpas_arr, userId) => {
   usercGPA[userId] = { cGpa };
   return usercGPA[userId].cGpa.toFixed(2);
 };
-
+/*
 async function generateQRCode(verificationData) {
   return new Promise((resolve, reject) => {
     const qrPath = path.join(__dirname, `qr_${Date.now()}.png`);
@@ -120,7 +119,7 @@ async function generateQRCode(verificationData) {
       }
     );
   });
-}
+} 
 
 async function generateGpaPdf(chatId, session, gpa, userFullName) {
   return new Promise(async (resolve, reject) => {
@@ -558,7 +557,7 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
       reject(err);
     }
   });
-}
+} */
 
 async function logUserCalculation(chatId, data, gpa, type = "GPA") {
   const verificationId = `JIU-${Math.random()
@@ -847,26 +846,22 @@ bot.on("text", async (ctx) => {
       await ctx.reply(
         `Your cGPA is: ${finalCgpa} \nGrade: ${letter}\n🔍 Verification ID: ${verificationId}`
       );
+      delete userStates[chatId];
 
-      const pdfPath = await generatecGpaPdf(
-        chatId,
-        SemesterData,
-        finalCgpa,
-        userFullName
-      );
+      //const pdfPath = await generatecGpaPdf(chatId, SemesterData, finalCgpa, userFullName);
 
-      try {
-        await ctx.replyWithDocument({
-          source: pdfPath,
-          filename: `cGPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
-        });
-        fs.unlinkSync(pdfPath);
-      } catch (err) {
-        console.error("PDF generation error:", err);
-        await ctx.reply("⚠️ Error generating PDF. Your cGPA is still saved.");
-      } finally {
-        delete userStates[chatId];
-      }
+      //try {
+      //   await ctx.replyWithDocument({
+      //     source: pdfPath,
+      //     filename: `cGPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
+      //   });
+      //   fs.unlinkSync(pdfPath);
+      // } catch (err) {
+      //   console.error("PDF generation error:", err);
+      //   await ctx.reply("⚠️ Error generating PDF. Your cGPA is still saved.");
+      // } finally {
+      //   delete userStates[chatId];
+      // }
       return;
     }
   }
@@ -946,20 +941,19 @@ bot.on("text", async (ctx) => {
         2
       )}\n🔍 Verification ID: ${verificationId}\n\n📄 Generating PDF report...`
     );
+    delete userStates[chatId];
 
-    const pdfPath = await generateGpaPdf(chatId, session, gpa, userFullName);
-    await ctx.replyWithDocument({
-      source: pdfPath,
-      filename: `GPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
-    });
-    fs.unlinkSync(pdfPath);
+    //  const pdfPath = await generateGpaPdf(chatId, session, gpa, userFullName);
+    //await ctx.replyWithDocument({
+    // source: pdfPath,
+    // filename: `GPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
+    //});
+    //fs.unlinkSync(pdfPath);
   } catch (err) {
     console.error("PDF generation error:", err);
     await ctx.reply(
       "⚠️ Error generating PDF. Here are your results:\n\n" + resultText
     );
-  } finally {
-    delete sessions[chatId];
   }
 });
 
@@ -1048,7 +1042,7 @@ app.post("/api/verify", async (req, res) => {
   }
 });
 
-// Function to set webhook
+/* Function to set webhook
 async function setWebhook() {
   try {
     const webhookUrl = process.env.WEBHOOK_URL;
@@ -1068,8 +1062,8 @@ async function setWebhook() {
     process.exit(1);
   }
 }
-
-// Start the server
+*/
+/* Start the server
 const startServer = async () => {
   try {
     // Set webhook first
@@ -1101,4 +1095,9 @@ const startServer = async () => {
   }
 };
 
+
+
 startServer();
+
+*/
+module.exports = app;

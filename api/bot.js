@@ -1,3 +1,3 @@
-const botHandler = require("../index");
+const app = require("../index");
 
-module.exports = botHandler;
+module.exports = app;
