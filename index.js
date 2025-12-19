@@ -1,23 +1,23 @@
+require("dotenv").config();
 const express = require("express");
 const { Telegraf, Markup } = require("telegraf");
 const admin = require("firebase-admin");
-//const PDFDocument = require("pdfkit");
-//const fs = require("fs");
-//const path = require("path");
-//const QRCode = require("qrcode");
+const PDFDocument = require("pdfkit");
+const fs = require("fs");
+const path = require("path");
+const QRCode = require("qrcode");
 
 const { version } = require("./package.json");
 const botVersion = version;
 const app = express();
-//const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3000;
 
 // Manual CORS middleware
 app.use((req, res, next) => {
-  // Update your CORS configuration to include your verification page
   const allowedOrigins = [
     "https://amenadamsolomon.rf.gd",
     "https://telegram.org",
-    "http://localhost:3000", // Add for local testing
+    "http://localhost:3000",
   ];
   const origin = req.headers.origin;
 
@@ -59,6 +59,15 @@ const courses = [
   { name: "Computer Programming (ECEg 2052)", credit: 5 },
 ];
 
+const firstSemesterNaturalCourses = [
+  { name: "Communicative English Language Skills I (FLEn. 1011)", credit: 3 },
+  { name: "General Physics (Phys. 1011)", credit: 3 },
+  { name: "General Psychology (Psyc. 1011)", credit: 3 },
+  { name: "Mathematics For Natural Sciences (Math. 1011)", credit: 3 },
+  { name: "Critical Thinking (LoCT. 1011)", credit: 3 },
+  { name: "Geography of Ethiopia and The Horn (GeES 1011)", credit: 3 },
+];
+
 function getGrade(score) {
   if (score > 90) return { letter: "A+", point: 4.0 };
   if (score >= 85) return { letter: "A", point: 4.0 };
@@ -98,7 +107,7 @@ const calculatecGPA = (gpas_arr, userId) => {
   usercGPA[userId] = { cGpa };
   return usercGPA[userId].cGpa.toFixed(2);
 };
-/*
+
 async function generateQRCode(verificationData) {
   return new Promise((resolve, reject) => {
     const qrPath = path.join(__dirname, `qr_${Date.now()}.png`);
@@ -119,7 +128,7 @@ async function generateQRCode(verificationData) {
       }
     );
   });
-} 
+}
 
 async function generateGpaPdf(chatId, session, gpa, userFullName) {
   return new Promise(async (resolve, reject) => {
@@ -284,6 +293,265 @@ async function generateGpaPdf(chatId, session, gpa, userFullName) {
       session.scores.forEach((score, i) => {
         const { letter, point } = getGrade(score);
         const course = courses[i];
+        const weighted = point * course.credit;
+        totalWeighted += weighted;
+        totalCredits += course.credit;
+
+        if (i % 2 === 0) {
+          doc
+            .rect(
+              startX,
+              y,
+              colWidths.course +
+                colWidths.credit +
+                colWidths.score +
+                colWidths.grade +
+                colWidths.point,
+              18
+            )
+            .fill("#f7fafc");
+        }
+
+        doc.fillColor("black");
+        doc.text(
+          course.name.substring(0, 30) + (course.name.length > 30 ? "..." : ""),
+          startX + 5,
+          y + 5
+        );
+        doc.text(
+          course.credit.toString(),
+          startX + colWidths.course + 5,
+          y + 5
+        );
+        doc.text(
+          score.toString(),
+          startX + colWidths.course + colWidths.credit + 5,
+          y + 5
+        );
+        doc.text(
+          letter,
+          startX + colWidths.course + colWidths.credit + colWidths.score + 5,
+          y + 5
+        );
+        doc.text(
+          point.toFixed(1),
+          startX +
+            colWidths.course +
+            colWidths.credit +
+            colWidths.score +
+            colWidths.grade +
+            5,
+          y + 5
+        );
+
+        y += 18;
+        doc
+          .moveTo(startX, y)
+          .lineTo(
+            startX +
+              colWidths.course +
+              colWidths.credit +
+              colWidths.score +
+              colWidths.grade +
+              colWidths.point,
+            y
+          )
+          .strokeColor("#e2e8f0")
+          .stroke();
+      });
+
+      // Summary section
+      y += 20;
+      doc.rect(startX, y, 200, 60).fill("#f0fff4");
+      doc.font("Helvetica-Bold").fontSize(12);
+      doc.fillColor("black");
+      doc.text("Summary", startX + 10, y + 10);
+      doc.font("Helvetica").fontSize(10);
+      doc.text(`Total Credits: ${totalCredits}`, startX + 10, y + 30);
+
+      // Add QR code
+      doc.image(qrPath, 350, y, { width: 80 });
+      doc
+        .fontSize(8)
+        .text("Scan to verify", 350, y + 85, { width: 80, align: "center" });
+
+      doc.end();
+
+      stream.on("finish", () => {
+        fs.unlinkSync(qrPath);
+        resolve(filePath);
+      });
+
+      stream.on("error", reject);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+async function generateGpaPdfFirst(chatId, session, gpa, userFullName) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const doc = new PDFDocument({
+        margin: 50,
+        size: "A4",
+        info: {
+          Title: "GPA Report",
+          Author: "Jimma University",
+          Subject: `GPA Report for ${userFullName}`,
+        },
+      });
+
+      const filePath = path.join(__dirname, `gpa_${chatId}_${Date.now()}.pdf`);
+      const stream = fs.createWriteStream(filePath);
+      doc.pipe(stream);
+
+      // Generate verification ID
+      const verificationId = `JIU-${Math.random()
+        .toString(36)
+        .substring(2, 10)
+        .toUpperCase()}`;
+
+      // Generate QR code
+      const qrPath = await generateQRCode(verificationId);
+
+      // Add background color
+      doc.rect(0, 0, doc.page.width, 120).fill("#1a365d");
+
+      // Add logo if exists
+      const logoPath = path.join(__dirname, "logo.png");
+      if (fs.existsSync(logoPath)) {
+        doc.image(logoPath, 50, 35, { width: 50 });
+      }
+
+      // Header text
+      doc.fillColor("white").fontSize(20).text("Jimma University", 110, 40);
+
+      // Warning text
+      doc
+        .fillColor("#e53e3e")
+        .fontSize(8)
+        .text(
+          "THIS IS NOT AN OFFICIAL GRADE REPORT: FOR EDUCATIONAL PURPOSES ONLY",
+          50,
+          100,
+          { align: "center" }
+        );
+
+      // Reset color for main content
+      doc.fillColor("black");
+
+      // Title
+      doc.fontSize(16).text("GPA Result Report", 50, 140, { align: "center" });
+
+      // Student info section
+      doc.rect(50, 170, doc.page.width - 80, 60).fill("#ebf8ff");
+
+      doc
+        .fillColor("black")
+        .fontSize(12)
+        .text(`Student: ${userFullName}`, 60, 185);
+      doc.text(`Date: ${new Date().toLocaleDateString()}`, 60, 205);
+      doc.text(`GPA: ${gpa.toFixed(2)}    `, 350, 185, { align: "right" });
+      doc.text(`Verification ID: ${verificationId}    `, 350, 205, {
+        align: "right",
+      });
+
+      // Table header
+      const startX = 50;
+      let y = 250;
+
+      const colWidths = {
+        course: 270,
+        credit: 50,
+        score: 50,
+        grade: 50,
+        point: 50,
+      };
+
+      // Table header with background
+      doc.rect(startX, y, colWidths.course, 20).fill("#e6fffa");
+      doc
+        .rect(startX + colWidths.course, y, colWidths.credit, 20)
+        .fill("#e6fffa");
+      doc
+        .rect(
+          startX + colWidths.course + colWidths.credit,
+          y,
+          colWidths.score,
+          20
+        )
+        .fill("#e6fffa");
+      doc
+        .rect(
+          startX + colWidths.course + colWidths.credit + colWidths.score,
+          y,
+          colWidths.grade,
+          20
+        )
+        .fill("#e6fffa");
+      doc
+        .rect(
+          startX +
+            colWidths.course +
+            colWidths.credit +
+            colWidths.score +
+            colWidths.grade,
+          y,
+          colWidths.point,
+          20
+        )
+        .fill("#e6fffa");
+
+      doc.font("Helvetica-Bold").fontSize(10);
+      doc.fillColor("black");
+      doc.text("Course", startX + 5, y + 5);
+      doc.text("ECTS", startX + colWidths.course + 5, y + 5);
+      doc.text(
+        "Score",
+        startX + colWidths.course + colWidths.credit + 5,
+        y + 5
+      );
+      doc.text(
+        "Grade",
+        startX + colWidths.course + colWidths.credit + colWidths.score + 5,
+        y + 5
+      );
+      doc.text(
+        "Point",
+        startX +
+          colWidths.course +
+          colWidths.credit +
+          colWidths.score +
+          colWidths.grade +
+          5,
+        y + 5
+      );
+
+      y += 20;
+
+      // Draw header bottom border
+      doc
+        .moveTo(startX, y)
+        .lineTo(
+          startX +
+            colWidths.course +
+            colWidths.credit +
+            colWidths.score +
+            colWidths.grade +
+            colWidths.point,
+          y
+        )
+        .stroke();
+
+      let totalWeighted = 0,
+        totalCredits = 0;
+      doc.font("Helvetica").fontSize(9);
+
+      // Table rows
+      session.scores.forEach((score, i) => {
+        const { letter, point } = getGrade(score);
+        const course = firstSemesterNaturalCourses[i];
         const weighted = point * course.credit;
         totalWeighted += weighted;
         totalCredits += course.credit;
@@ -557,7 +825,7 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
       reject(err);
     }
   });
-} */
+}
 
 async function logUserCalculation(chatId, data, gpa, type = "GPA") {
   const verificationId = `JIU-${Math.random()
@@ -611,6 +879,7 @@ function replaceMacros(message, macros = {}) {
   return processedMessage;
 }
 
+// Bot middleware
 bot.use(async (ctx, next) => {
   if (ctx.from) {
     const chatId = ctx.from.id;
@@ -632,6 +901,7 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
+// Bot commands and handlers
 bot.start(async (ctx) => {
   const chatId = ctx.chat.id;
   const user = ctx.from;
@@ -652,16 +922,22 @@ bot.start(async (ctx) => {
   await ctx.reply(
     "📘 Welcome to GPA Calculator!",
     Markup.keyboard([
-      ["🎓 Calculate GPA", "[NEW] Calculate cGPA"],
+      ["🎓 Calculate 1st Sem. GPA", "🎓 Calculate 2nd Sem. GPA"],
+      ["[NEW] Calculate cGPA"],
       ["📜 My History", "🔍 Verify Result"],
-      ["📢 About", "📬 Broadcast (Admin)"],
+      ["📢 About"],
     ]).resize()
   );
 });
 
 bot.help((ctx) => {
   return ctx.reply(
-    `This bot is developed by Amenadam Solomon\nGitHub: https://github.com/amenadam \nBot version: ${botVersion}`
+    `Disclaimer:
+This calculator is for estimation purposes only. The official GPA and CGPA will be determined and published by the University Registrar's office. While we strive for accuracy, always refer to your official transcript for final grades.
+
+Bot version: ${botVersion}
+
+Powered by @JUStudentsNetwork`
   );
 });
 
@@ -687,8 +963,15 @@ bot.hears("[NEW] Calculate cGPA", (ctx) => {
   return ctx.reply("Enter first semester GPA:");
 });
 
-bot.hears("🎓 Calculate GPA", (ctx) => {
+bot.hears("🎓 Calculate 2nd Sem. GPA", (ctx) => {
   const chatId = ctx.chat.id;
+  userStates[chatId] = {
+    status: "calculating_second",
+    index: 0,
+    scores: [],
+    userFirstName: ctx.from.first_name || "",
+    userLastName: ctx.from.last_name || "",
+  };
   sessions[chatId] = {
     index: 0,
     scores: [],
@@ -696,6 +979,26 @@ bot.hears("🎓 Calculate GPA", (ctx) => {
     userLastName: ctx.from.last_name || "",
   };
   return ctx.reply(`Send your score for: ${courses[0].name}`);
+});
+
+bot.hears("🎓 Calculate 1st Sem. GPA", (ctx) => {
+  const chatId = ctx.chat.id;
+  userStates[chatId] = {
+    status: "calculating_first",
+    index: 0,
+    scores: [],
+    userFirstName: ctx.from.first_name || "",
+    userLastName: ctx.from.last_name || "",
+  };
+  sessions[chatId] = {
+    index: 0,
+    scores: [],
+    userFirstName: ctx.from.first_name || "",
+    userLastName: ctx.from.last_name || "",
+  };
+  return ctx.reply(
+    `Send your score for: ${firstSemesterNaturalCourses[0].name}`
+  );
 });
 
 bot.hears("📜 My History", async (ctx) => {
@@ -725,7 +1028,12 @@ bot.hears("📜 My History", async (ctx) => {
 
 bot.hears("📢 About", (ctx) => {
   return ctx.reply(
-    "This bot is developed by Amenadam Solomon\nGitHub: https://github.com/amenadam"
+    `Disclaimer:
+This calculator is for estimation purposes only. The official GPA and CGPA will be determined and published by the University Registrar's office. While we strive for accuracy, always refer to your official transcript for final grades.
+
+Bot version: ${botVersion}
+
+Powered by @JUStudentsNetwork`
   );
 });
 
@@ -795,19 +1103,23 @@ bot.on("callback_query", async (ctx) => {
   }
 });
 
-bot.hears("📬 Broadcast (Admin)", async (ctx) => {
+bot.hears("broadcast", async (ctx) => {
   const chatId = ctx.chat.id;
   if (chatId.toString() !== ADMIN_ID) return ctx.reply("🚫 Not authorized.");
 
   const macroList = `📨 Send your broadcast message with these macros:\n\n• {{VERSION}} - Bot version (${botVersion})\n• {{DATE}} - Current date\n• {{TIME}} - Current time\n• {{DATETIME}} - Date and time\n• {{BOT_NAME}} - Bot's name\n• {{ADMIN}} - Your name\n\nExample: "Hello! This is {{BOT_NAME}} v{{VERSION}} sending a message on {{DATETIME}}"`;
   ctx.reply(macroList);
   sessions[chatId] = { mode: "broadcast" };
+  userStates[chatId] = {
+    status: "broadcast",
+  };
 });
 
 bot.on("text", async (ctx) => {
   const chatId = ctx.chat.id;
   const text = ctx.message.text.trim();
   const session = sessions[chatId];
+
   // Handle cGPA calculation
   if (userStates[chatId] && userStates[chatId].status === "calculating_cGPA") {
     const state = userStates[chatId];
@@ -835,10 +1147,9 @@ bot.on("text", async (ctx) => {
         { semester: "Second Semester", gpa: state.gpas[1], credits: 33 },
       ];
 
-      // FIX: Pass the state object instead of session
       const verificationId = await logUserCalculation(
         chatId,
-        state, // Changed from session to state
+        state,
         finalCgpa,
         "CGPA"
       );
@@ -846,29 +1157,159 @@ bot.on("text", async (ctx) => {
       await ctx.reply(
         `Your cGPA is: ${finalCgpa} \nGrade: ${letter}\n🔍 Verification ID: ${verificationId}`
       );
-      delete userStates[chatId];
 
-      //const pdfPath = await generatecGpaPdf(chatId, SemesterData, finalCgpa, userFullName);
+      const pdfPath = await generatecGpaPdf(
+        chatId,
+        SemesterData,
+        finalCgpa,
+        userFullName
+      );
 
-      //try {
-      //   await ctx.replyWithDocument({
-      //     source: pdfPath,
-      //     filename: `cGPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
-      //   });
-      //   fs.unlinkSync(pdfPath);
-      // } catch (err) {
-      //   console.error("PDF generation error:", err);
-      //   await ctx.reply("⚠️ Error generating PDF. Your cGPA is still saved.");
-      // } finally {
-      //   delete userStates[chatId];
-      // }
+      try {
+        await ctx.replyWithDocument({
+          source: pdfPath,
+          filename: `cGPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
+        });
+        fs.unlinkSync(pdfPath);
+      } catch (err) {
+        console.error("PDF generation error:", err);
+        await ctx.reply("⚠️ Error generating PDF. Your cGPA is still saved.");
+      } finally {
+        delete userStates[chatId];
+      }
       return;
+    }
+  }
+
+  if (userStates[chatId] && userStates[chatId].status === "calculating_first") {
+    const score = parseFloat(text);
+    if (isNaN(score) || score < 0 || score > 100)
+      return ctx.reply("❌ Enter a valid score (0-100)");
+
+    session.scores.push(score);
+    session.index++;
+
+    if (session.index < firstSemesterNaturalCourses.length)
+      return ctx.reply(
+        `Next score for: ${firstSemesterNaturalCourses[session.index].name}`
+      );
+
+    let totalWeighted = 0,
+      totalCredits = 0;
+    let resultText = "📊 GPA Results:\n\n";
+
+    session.scores.forEach((score, i) => {
+      const { letter, point } = getGrade(score);
+      const course = firstSemesterNaturalCourses[i];
+      const weighted = point * course.credit;
+      totalWeighted += weighted;
+      totalCredits += course.credit;
+      resultText += `${course.name}: ${score} → ${letter} (${point}) x ${
+        course.credit
+      } = ${weighted.toFixed(2)}\n`;
+    });
+
+    const gpa = totalWeighted / totalCredits;
+    const verificationId = await logUserCalculation(chatId, session, gpa);
+    const userFullName = `${ctx.from.first_name || ""} ${
+      ctx.from.last_name || ""
+    }`.trim();
+
+    try {
+      await ctx.reply(
+        `${resultText}\n🎯 Final GPA: ${gpa.toFixed(
+          2
+        )}\n🔍 Verification ID: ${verificationId}\n\n📄 Generating PDF report...`
+      );
+
+      const pdfPath = await generateGpaPdfFirst(
+        chatId,
+        session,
+        gpa,
+        userFullName
+      );
+
+      await ctx.replyWithDocument({
+        source: pdfPath,
+        filename: `GPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
+      });
+      fs.unlinkSync(pdfPath);
+      return;
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      await ctx.reply(
+        "⚠️ Error generating PDF. Here are your results:\n\n" + resultText
+      );
+    } finally {
+      delete sessions[chatId];
+    }
+  }
+
+  if (
+    userStates[chatId] &&
+    userStates[chatId].status === "calculating_second"
+  ) {
+    const score = parseFloat(text);
+    if (isNaN(score) || score < 0 || score > 100)
+      return ctx.reply("❌ Enter a valid score (0-100)");
+
+    session.scores.push(score);
+    session.index++;
+
+    if (session.index < courses.length)
+      return ctx.reply(`Next score for: ${courses[session.index].name}`);
+
+    let totalWeighted = 0,
+      totalCredits = 0;
+    let resultText = "📊 GPA Results:\n\n";
+
+    session.scores.forEach((score, i) => {
+      const { letter, point } = getGrade(score);
+      const course = courses[i];
+      const weighted = point * course.credit;
+      totalWeighted += weighted;
+      totalCredits += course.credit;
+      resultText += `${course.name}: ${score} → ${letter} (${point}) x ${
+        course.credit
+      } = ${weighted.toFixed(2)}\n`;
+    });
+
+    const gpa = totalWeighted / totalCredits;
+    const verificationId = await logUserCalculation(chatId, session, gpa);
+    const userFullName = `${ctx.from.first_name || ""} ${
+      ctx.from.last_name || ""
+    }`.trim();
+
+    try {
+      await ctx.reply(
+        `${resultText}\n🎯 Final GPA: ${gpa.toFixed(
+          2
+        )}\n🔍 Verification ID: ${verificationId}\n\n📄 Generating PDF report...`
+      );
+
+      const pdfPath = await generateGpaPdf(chatId, session, gpa, userFullName);
+      await ctx.replyWithDocument({
+        source: pdfPath,
+        filename: `GPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
+      });
+      fs.unlinkSync(pdfPath);
+      return;
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      await ctx.reply(
+        "⚠️ Error generating PDF. Here are your results:\n\n" + resultText
+      );
+    } finally {
+      delete sessions[chatId];
     }
   }
 
   if (!session) return;
 
-  if (session.mode === "broadcast") {
+  if (
+    session.mode === "broadcast" ||
+    userStates[chatId].status === "broadcast"
+  ) {
     const macros = {
       VERSION: botVersion,
       DATE: new Date().toLocaleDateString(),
@@ -902,70 +1343,11 @@ bot.on("text", async (ctx) => {
     delete sessions[chatId];
     return;
   }
-
-  // Handle GPA calculation
-  const score = parseFloat(text);
-  if (isNaN(score) || score < 0 || score > 100)
-    return ctx.reply("❌ Enter a valid score (0-100)");
-
-  session.scores.push(score);
-  session.index++;
-
-  if (session.index < courses.length)
-    return ctx.reply(`Next score for: ${courses[session.index].name}`);
-
-  let totalWeighted = 0,
-    totalCredits = 0;
-  let resultText = "📊 GPA Results:\n\n";
-
-  session.scores.forEach((score, i) => {
-    const { letter, point } = getGrade(score);
-    const course = courses[i];
-    const weighted = point * course.credit;
-    totalWeighted += weighted;
-    totalCredits += course.credit;
-    resultText += `${course.name}: ${score} → ${letter} (${point}) x ${
-      course.credit
-    } = ${weighted.toFixed(2)}\n`;
-  });
-
-  const gpa = totalWeighted / totalCredits;
-  const verificationId = await logUserCalculation(chatId, session, gpa);
-  const userFullName = `${ctx.from.first_name || ""} ${
-    ctx.from.last_name || ""
-  }`.trim();
-
-  try {
-    await ctx.reply(
-      `${resultText}\n🎯 Final GPA: ${gpa.toFixed(
-        2
-      )}\n🔍 Verification ID: ${verificationId}\n\n📄 Generating PDF report...`
-    );
-    delete userStates[chatId];
-
-    //  const pdfPath = await generateGpaPdf(chatId, session, gpa, userFullName);
-    //await ctx.replyWithDocument({
-    // source: pdfPath,
-    // filename: `GPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
-    //});
-    //fs.unlinkSync(pdfPath);
-  } catch (err) {
-    console.error("PDF generation error:", err);
-    await ctx.reply(
-      "⚠️ Error generating PDF. Here are your results:\n\n" + resultText
-    );
-  }
 });
 
-// Webhook endpoint
-app.post(`/webhook`, async (req, res) => {
-  try {
-    await bot.handleUpdate(req.body);
-    res.sendStatus(200);
-  } catch (err) {
-    console.error("Webhook error:", err);
-    res.sendStatus(500);
-  }
+// Webhook route - CRITICAL FOR WEBHOOK MODE
+app.post(`/webhook/${process.env.BOT_TOKEN}`, (req, res) => {
+  bot.handleUpdate(req.body, res);
 });
 
 // Health check endpoint
@@ -973,13 +1355,14 @@ app.get("/health", (req, res) => {
   res.status(200).json({
     status: "healthy",
     timestamp: new Date().toISOString(),
-    bot: true,
+    webhook: true,
+    botVersion: botVersion,
   });
 });
 
-// Main route
+// Root endpoint
 app.get("/", (req, res) => {
-  res.send("Bot is running with webhook");
+  res.send("🤖 GPA Calculator Bot is running with webhooks!");
 });
 
 // Logs endpoint
@@ -1042,62 +1425,65 @@ app.post("/api/verify", async (req, res) => {
   }
 });
 
-/* Function to set webhook
+// Webhook setup function
 async function setWebhook() {
+  const webhookUrl = `${process.env.RENDER_EXTERNAL_URL}/webhook/${process.env.BOT_TOKEN}`;
+
   try {
-    const webhookUrl = process.env.WEBHOOK_URL;
-    if (!webhookUrl) {
-      console.error("WEBHOOK_URL environment variable is required");
-      process.exit(1);
-    }
+    await bot.telegram.setWebhook(webhookUrl);
+    console.log(`✅ Webhook set to: ${webhookUrl}`);
 
-    const webhookPath = "/webhook";
-    const fullWebhookUrl = webhookUrl + webhookPath;
-
-    await bot.telegram.setWebhook(fullWebhookUrl);
-    console.log(`✅ Webhook set to: ${fullWebhookUrl}`);
-    console.log("🤖 Bot is ready to receive updates via webhook");
+    // Verify webhook info
+    const webhookInfo = await bot.telegram.getWebhookInfo();
+    console.log("📋 Webhook info:", {
+      url: webhookInfo.url,
+      has_custom_certificate: webhookInfo.has_custom_certificate,
+      pending_update_count: webhookInfo.pending_update_count,
+    });
   } catch (error) {
     console.error("❌ Error setting webhook:", error);
-    process.exit(1);
   }
 }
-*/
-/* Start the server
+
+// Start server function
 const startServer = async () => {
   try {
-    // Set webhook first
-    await setWebhook();
-
     // Start Express server
     app.listen(port, () => {
       console.log(`🚀 Server running on port ${port}`);
-      console.log(`📞 Webhook endpoint: /webhook`);
-      console.log(`🔧 Health check: /health`);
-      console.log(`📊 Logs endpoint: /logs`);
+      console.log(`🌐 Environment: ${process.env.NODE_ENV || "development"}`);
     });
 
-    // Optional: Keep the bot running gracefully
+    // Set webhook after server starts (production mode)
+    if (process.env.WEBHOOK_URL) {
+      console.log("🔧 Production mode detected");
+      await setWebhook();
+      console.log("🤖 Bot running in webhook mode");
+    } else {
+      console.log("🔧 Development mode - using polling");
+      await bot.launch();
+      console.log("🤖 Bot running in polling mode");
+    }
+
+    // Graceful shutdown
     process.once("SIGINT", () => {
-      console.log("🛑 SIGINT received, shutting down gracefully...");
+      console.log("🛑 Shutting down gracefully...");
       bot.stop("SIGINT");
       process.exit(0);
     });
 
     process.once("SIGTERM", () => {
-      console.log("🛑 SIGTERM received, shutting down gracefully...");
+      console.log("🛑 Received SIGTERM, shutting down...");
       bot.stop("SIGTERM");
       process.exit(0);
     });
+
+    console.log("✅ Bot started successfully");
   } catch (err) {
-    console.error("Startup error:", err);
+    console.error("❌ Startup error:", err);
     process.exit(1);
   }
 };
 
-
-
+// Start the application
 startServer();
-
-*/
-module.exports = app;
