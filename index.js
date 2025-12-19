@@ -1221,27 +1221,25 @@ bot.on("text", async (ctx) => {
       await ctx.reply(
         `${resultText}\n🎯 Final GPA: ${gpa.toFixed(
           2
-        )}\n🔍 Verification ID: ${verificationId}\n\n📄 Generating PDF report...`
+        )}\n🔍 Verification ID: ${verificationId}\n\n📄 PDF Generation temporarly not available!`
       );
+      delete sessions[chatId];
 
-      const pdfPath = await generateGpaPdfFirst(
-        chatId,
-        session,
-        gpa,
-        userFullName
-      );
+      //const pdfPath = await generateGpaPdfFirst(
+      //  chatId,
+      //   session,
+      //   gpa,
+      //   userFullName
+      // );
 
-      await ctx.replyWithDocument({
-        source: pdfPath,
-        filename: `GPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
-      });
-      fs.unlinkSync(pdfPath);
+      // await ctx.replyWithDocument({
+      //   source: pdfPath,
+      //    filename: `GPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
+      //  });
+      // fs.unlinkSync(pdfPath);
       return;
     } catch (err) {
       console.error("PDF generation error:", err);
-      await ctx.reply(
-        "⚠️ Error generating PDF. Here are your results:\n\n" + resultText
-      );
     } finally {
       delete sessions[chatId];
     }
@@ -1286,21 +1284,22 @@ bot.on("text", async (ctx) => {
       await ctx.reply(
         `${resultText}\n🎯 Final GPA: ${gpa.toFixed(
           2
-        )}\n🔍 Verification ID: ${verificationId}\n\n📄 Generating PDF report...`
+        )}\n🔍 Verification ID: ${verificationId}\n\n📄 PDF Generation temporarly not available!`
       );
+      delete sessions[chatId];
 
-      const pdfPath = await generateGpaPdf(chatId, session, gpa, userFullName);
-      await ctx.replyWithDocument({
-        source: pdfPath,
-        filename: `GPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
-      });
-      fs.unlinkSync(pdfPath);
+      // const pdfPath = await generateGpaPdf(chatId, session, gpa, userFullName);
+      // await ctx.replyWithDocument({
+      //   source: pdfPath,
+      //   filename: `GPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
+      //  });
+      //  fs.unlinkSync(pdfPath);
       return;
     } catch (err) {
       console.error("PDF generation error:", err);
-      await ctx.reply(
-        "⚠️ Error generating PDF. Here are your results:\n\n" + resultText
-      );
+      //await ctx.reply(
+      //   "⚠️ Error generating PDF. Here are your results:\n\n" + resultText
+      // );
     } finally {
       delete sessions[chatId];
     }
