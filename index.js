@@ -10,7 +10,7 @@ const admin = require("firebase-admin");
 const { version } = require("./package.json");
 const botVersion = version;
 const app = express();
-const port = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 const WEBHOOK_URL = process.env.WEBHOOK_URL;
 
 // Manual CORS middleware
