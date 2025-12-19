@@ -39,9 +39,7 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 // Initialize Firebase
-const serviceAccount = JSON.parse(
-  process.env.FIREBASE_CONFIG_JSON.replace(/\\n/g, "\n")
-);
+const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG_JSON);
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 
 const db = admin.firestore();
