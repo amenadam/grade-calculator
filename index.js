@@ -2,10 +2,10 @@ require("dotenv").config();
 const express = require("express");
 const { Telegraf, Markup } = require("telegraf");
 const admin = require("firebase-admin");
-const PDFDocument = require("pdfkit");
-const fs = require("fs");
-const path = require("path");
-const QRCode = require("qrcode");
+//const PDFDocument = require("pdfkit");
+//const fs = require("fs");
+//const path = require("path");
+//const QRCode = require("qrcode");
 
 const { version } = require("./package.json");
 const botVersion = version;
@@ -107,7 +107,7 @@ const calculatecGPA = (gpas_arr, userId) => {
   usercGPA[userId] = { cGpa };
   return usercGPA[userId].cGpa.toFixed(2);
 };
-
+/*
 async function generateQRCode(verificationData) {
   return new Promise((resolve, reject) => {
     const qrPath = path.join(__dirname, `qr_${Date.now()}.png`);
@@ -646,7 +646,7 @@ async function generateGpaPdfFirst(chatId, session, gpa, userFullName) {
       reject(err);
     }
   });
-}
+} 
 
 async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
   return new Promise(async (resolve, reject) => {
@@ -827,6 +827,7 @@ async function generatecGpaPdf(chatId, semesters, cgpa, userFullName) {
   });
 }
 
+*/
 async function logUserCalculation(chatId, data, gpa, type = "GPA") {
   const verificationId = `JIU-${Math.random()
     .toString(36)
@@ -1445,45 +1446,21 @@ async function setWebhook() {
   }
 }
 
-// Start server function
-const startServer = async () => {
+app.use(bot.webhookCallback("/webhook"));
+
+async function startServer() {
   try {
-    // Start Express server
-    app.listen(port, () => {
-      console.log(`🚀 Server running on port ${port}`);
-      console.log(`🌐 Environment: ${process.env.NODE_ENV || "development"}`);
+    await bot.telegram.setWebhook(`${WEBHOOK_URL}/webhook`);
+    console.log(`✅ Webhook set to: ${WEBHOOK_URL}/webhook`);
+
+    app.listen(PORT, () => {
+      console.log(`🤖 Server running on port ${PORT}`);
     });
-
-    // Set webhook after server starts (production mode)
-    if (process.env.WEBHOOK_URL) {
-      console.log("🔧 Production mode detected");
-      await setWebhook();
-      console.log("🤖 Bot running in webhook mode");
-    } else {
-      console.log("🔧 Development mode - using polling");
-      await bot.launch();
-      console.log("🤖 Bot running in polling mode");
-    }
-
-    // Graceful shutdown
-    process.once("SIGINT", () => {
-      console.log("🛑 Shutting down gracefully...");
-      bot.stop("SIGINT");
-      process.exit(0);
-    });
-
-    process.once("SIGTERM", () => {
-      console.log("🛑 Received SIGTERM, shutting down...");
-      bot.stop("SIGTERM");
-      process.exit(0);
-    });
-
-    console.log("✅ Bot started successfully");
-  } catch (err) {
-    console.error("❌ Startup error:", err);
+  } catch (error) {
+    console.error("❌ Failed to start server:", error);
     process.exit(1);
   }
-};
+}
 
 // Start the application
 startServer();
