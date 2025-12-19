@@ -963,10 +963,32 @@ bot.on("text", async (ctx) => {
   }
 });
 
-app.get("/", (req, res) => {
-  res.send("Bot is running");
+// Webhook endpoint
+app.post(`/webhook`, async (req, res) => {
+  try {
+    await bot.handleUpdate(req.body);
+    res.sendStatus(200);
+  } catch (err) {
+    console.error("Webhook error:", err);
+    res.sendStatus(500);
+  }
 });
 
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+    bot: true,
+  });
+});
+
+// Main route
+app.get("/", (req, res) => {
+  res.send("Bot is running with webhook");
+});
+
+// Logs endpoint
 app.get("/logs", async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -992,18 +1014,7 @@ app.get("/logs", async (req, res) => {
   }
 });
 
-app.get("/health", (req, res) => {
-  res.status(200).json({
-    status: "healthy",
-    timestamp: new Date().toISOString(),
-    bot: true,
-  });
-});
-
-app.get("/", (req, res) => {
-  res.send("Bot is running");
-});
-
+// Verification endpoint
 app.post("/api/verify", async (req, res) => {
   try {
     const { verificationId } = req.body;
@@ -1037,30 +1048,57 @@ app.post("/api/verify", async (req, res) => {
   }
 });
 
-const startServers = async () => {
+// Function to set webhook
+async function setWebhook() {
   try {
-    app.listen(port, () => console.log(`Web server on port ${port}`));
-    await bot.launch();
-    console.log("🤖 Bot is running");
+    const webhookUrl = process.env.WEBHOOK_URL;
+    if (!webhookUrl) {
+      console.error("WEBHOOK_URL environment variable is required");
+      process.exit(1);
+    }
 
-    const now = new Date();
-    const nextMidnight = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() + 1
-    );
-    const msUntilMidnight = nextMidnight - now;
-    setTimeout(() => {
-      console.log("🔄 Restarting bot at midnight");
+    const webhookPath = "/webhook";
+    const fullWebhookUrl = webhookUrl + webhookPath;
+
+    await bot.telegram.setWebhook(fullWebhookUrl);
+    console.log(`✅ Webhook set to: ${fullWebhookUrl}`);
+    console.log("🤖 Bot is ready to receive updates via webhook");
+  } catch (error) {
+    console.error("❌ Error setting webhook:", error);
+    process.exit(1);
+  }
+}
+
+// Start the server
+const startServer = async () => {
+  try {
+    // Set webhook first
+    await setWebhook();
+
+    // Start Express server
+    app.listen(port, () => {
+      console.log(`🚀 Server running on port ${port}`);
+      console.log(`📞 Webhook endpoint: /webhook`);
+      console.log(`🔧 Health check: /health`);
+      console.log(`📊 Logs endpoint: /logs`);
+    });
+
+    // Optional: Keep the bot running gracefully
+    process.once("SIGINT", () => {
+      console.log("🛑 SIGINT received, shutting down gracefully...");
+      bot.stop("SIGINT");
       process.exit(0);
-    }, msUntilMidnight);
+    });
 
-    process.once("SIGINT", () => bot.stop("SIGINT"));
-    process.once("SIGTERM", () => bot.stop("SIGTERM"));
+    process.once("SIGTERM", () => {
+      console.log("🛑 SIGTERM received, shutting down gracefully...");
+      bot.stop("SIGTERM");
+      process.exit(0);
+    });
   } catch (err) {
     console.error("Startup error:", err);
     process.exit(1);
   }
 };
 
-startServers();
+startServer();
