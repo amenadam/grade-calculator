@@ -1239,34 +1239,19 @@ bot.on("text", async (ctx) => {
         finalCgpa,
         "CGPA"
       );
-      await ctx.reply("calculating, please wait...");
+
+      const calculatingMsg = await ctx.reply("calculating, please wait...");
       await new Promise((resolve) => setTimeout(resolve, 2000));
-      await ctx.deleteMessage();
+
+      try {
+        await ctx.deleteMessage(calculatingMsg.message_id);
+      } catch (err) {
+        console.error("Error deleting message:", err);
+      }
 
       await ctx.reply(
         `Your cGPA is: ${finalCgpa} \nGrade: ${letter}\n🔍 Verification ID: ${verificationId}`
       );
-
-      // Temporarily disabled PDF generation
-      // const pdfPath = await generatecGpaPdf(
-      //   chatId,
-      //   SemesterData,
-      //   finalCgpa,
-      //   userFullName
-      // );
-      //
-      // try {
-      //   await ctx.replyWithDocument({
-      //     source: pdfPath,
-      //     filename: `cGPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
-      //   });
-      //   fs.unlinkSync(pdfPath);
-      // } catch (err) {
-      //   console.error("PDF generation error:", err);
-      //   await ctx.reply("⚠️ Error generating PDF. Your cGPA is still saved.");
-      // } finally {
-      //   delete userStates[chatId];
-      // }
 
       delete userStates[chatId];
       return;
@@ -1300,9 +1285,15 @@ bot.on("text", async (ctx) => {
         course.credit
       } = ${weighted.toFixed(2)}\n`;
     });
-    await ctx.reply("calculating, please wait...");
+
+    const calculatingMsg = await ctx.reply("calculating, please wait...");
     await new Promise((resolve) => setTimeout(resolve, 2000));
-    await ctx.deleteMessage();
+
+    try {
+      await ctx.deleteMessage(calculatingMsg.message_id);
+    } catch (err) {
+      console.error("Error deleting message:", err);
+    }
 
     const gpa = totalWeighted / totalCredits;
     const verificationId = await logUserCalculation(chatId, session, gpa);
@@ -1368,9 +1359,14 @@ bot.on("text", async (ctx) => {
       ctx.from.last_name || ""
     }`.trim();
 
-    await ctx.reply("calculating, please wait...");
+    const calculatingMsg = await ctx.reply("calculating, please wait...");
     await new Promise((resolve) => setTimeout(resolve, 2000));
-    await ctx.deleteMessage();
+
+    try {
+      await ctx.deleteMessage(calculatingMsg.message_id);
+    } catch (err) {
+      console.error("Error deleting message:", err);
+    }
 
     try {
       await ctx.reply(
