@@ -50,7 +50,7 @@ const usersRef = db.collection("users");
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const ADMIN_ID = process.env.ADMIN_ID;
 
-const courses = [
+const coursesPreEngineering = [
   { name: "Applied Mathematics I (Math. 1041)", credit: 5 },
   { name: "Communicative English Language Skills II (FLEn. 1012)", credit: 5 },
   { name: "Moral and Civic Education (MCiE. 1012)", credit: 4 },
@@ -58,6 +58,16 @@ const courses = [
   { name: "Social Anthropology (Anth. 1012)", credit: 4 },
   { name: "Introduction to Emerging Technologies (EmTe. 1012)", credit: 5 },
   { name: "Computer Programming (ECEg 2052)", credit: 5 },
+];
+
+const coursesOtherNaturalScience = [
+  { name: "Chemistry", credit: 5 },
+  { name: "English", credit: 5 },
+  { name: "Anthropology", credit: 4 },
+  { name: "Civic", credit: 4 },
+  { name: "Economics", credit: 5 },
+  { name: "Biology", credit: 5 },
+  { name: "Emerging Technology", credit: 5 },
 ];
 
 const firstSemesterNaturalCourses = [
@@ -848,10 +858,19 @@ async function logUserCalculation(chatId, data, gpa, type = "GPA") {
     gpa: parseFloat(gpa).toFixed(2),
     verificationId,
     type,
+    program: data.program || "Pre-Engineering", // Add program field
   };
 
   // Only add results for GPA calculations (not cGPA)
   if (type === "GPA" && data.scores) {
+    // Determine which courses to use based on program
+    const courses =
+      data.program === "Other Natural Science"
+        ? coursesOtherNaturalScience
+        : data.program === "First Semester"
+        ? firstSemesterNaturalCourses
+        : coursesPreEngineering;
+
     logData.results = data.scores.map((score, i) => {
       const grade = getGrade(score);
       return {
@@ -966,21 +985,70 @@ bot.hears("[NEW] Calculate cGPA", (ctx) => {
 });
 
 bot.hears("🎓 Calculate 2nd Sem. GPA", (ctx) => {
+  return ctx.reply(
+    "Please select your program:",
+    Markup.inlineKeyboard([
+      [
+        Markup.button.callback("🔧 Pre-Engineering", "program_pre_engineering"),
+        Markup.button.callback(
+          "🔬 Other Natural Science",
+          "program_other_science"
+        ),
+      ],
+    ])
+  );
+});
+
+bot.action("program_pre_engineering", async (ctx) => {
   const chatId = ctx.chat.id;
+  await ctx.answerCbQuery();
+
   userStates[chatId] = {
     status: "calculating_second",
     index: 0,
     scores: [],
+    program: "Pre-Engineering",
     userFirstName: ctx.from.first_name || "",
     userLastName: ctx.from.last_name || "",
   };
+
   sessions[chatId] = {
     index: 0,
     scores: [],
+    program: "Pre-Engineering",
     userFirstName: ctx.from.first_name || "",
     userLastName: ctx.from.last_name || "",
   };
-  return ctx.reply(`Send your score for: ${courses[0].name}`);
+
+  return ctx.reply(
+    `Selected: Pre-Engineering\n\nSend your score for: ${coursesPreEngineering[0].name}`
+  );
+});
+
+bot.action("program_other_science", async (ctx) => {
+  const chatId = ctx.chat.id;
+  await ctx.answerCbQuery();
+
+  userStates[chatId] = {
+    status: "calculating_second",
+    index: 0,
+    scores: [],
+    program: "Other Natural Science",
+    userFirstName: ctx.from.first_name || "",
+    userLastName: ctx.from.last_name || "",
+  };
+
+  sessions[chatId] = {
+    index: 0,
+    scores: [],
+    program: "Other Natural Science",
+    userFirstName: ctx.from.first_name || "",
+    userLastName: ctx.from.last_name || "",
+  };
+
+  return ctx.reply(
+    `Selected: Other Natural Science\n\nSend your score for: ${coursesOtherNaturalScience[0].name}`
+  );
 });
 
 bot.hears("🎓 Calculate 1st Sem. GPA", (ctx) => {
@@ -989,12 +1057,14 @@ bot.hears("🎓 Calculate 1st Sem. GPA", (ctx) => {
     status: "calculating_first",
     index: 0,
     scores: [],
+    program: "First Semester",
     userFirstName: ctx.from.first_name || "",
     userLastName: ctx.from.last_name || "",
   };
   sessions[chatId] = {
     index: 0,
     scores: [],
+    program: "First Semester",
     userFirstName: ctx.from.first_name || "",
     userLastName: ctx.from.last_name || "",
   };
@@ -1018,9 +1088,10 @@ bot.hears("📜 My History", async (ctx) => {
     const date = new Date(data.timestamp).toLocaleString();
     const gpa = data.gpa;
     const docId = doc.id;
+    const program = data.program || "Pre-Engineering";
 
     await ctx.replyWithMarkdown(
-      `📅 ${date}\n🎯 GPA: *${gpa}*`,
+      `📅 ${date}\n🎓 Program: ${program}\n🎯 GPA: *${gpa}*`,
       Markup.inlineKeyboard([
         Markup.button.callback("🔍 View Details", `viewlog_${docId}`),
       ])
@@ -1054,9 +1125,10 @@ bot.hears("logs", async (ctx) => {
       const gpa = data.gpa;
       const userId = data.userId;
       const docId = doc.id;
+      const program = data.program || "Pre-Engineering";
 
       await ctx.replyWithMarkdown(
-        `🧾 Log for 🧑‍🎓 ID: ${userId}\n📅 ${date}\n🎯 GPA: *${gpa}*`,
+        `🧾 Log for 🧑‍🎓 ID: ${userId}\n📅 ${date}\n🎓 Program: ${program}\n🎯 GPA: *${gpa}*`,
         Markup.inlineKeyboard([
           Markup.button.callback("🔍 View Details", `viewlog_${docId}`),
         ])
@@ -1070,6 +1142,12 @@ bot.hears("logs", async (ctx) => {
 
 bot.on("callback_query", async (ctx) => {
   const callbackData = ctx.callbackQuery.data;
+
+  // Handle program selection callbacks
+  if (callbackData.startsWith("program_")) {
+    return; // Already handled by specific handlers
+  }
+
   if (!callbackData.startsWith("viewlog_")) return ctx.answerCbQuery();
 
   const docId = callbackData.split("_")[1];
@@ -1082,6 +1160,7 @@ bot.on("callback_query", async (ctx) => {
     const gpa = data.gpa;
     const userId = data.userId.toString();
     const results = data.results;
+    const program = data.program || "Pre-Engineering";
 
     if (
       ctx.chat.id.toString() !== ADMIN_ID &&
@@ -1090,12 +1169,17 @@ bot.on("callback_query", async (ctx) => {
       return ctx.answerCbQuery("🚫 You are not authorized to view this log");
     }
 
-    let message = `📘 *Detailed GPA Log*\n🧑‍🎓 User ID: ${userId}\n📅 Date: ${date}\n🎯 GPA: *${gpa}*\n\n`;
-    results.forEach((r, i) => {
-      message += `${i + 1}. ${r.course}\nScore: ${r.score} → ${r.grade} (${
-        r.point
-      }) x ${r.credit}\n\n`;
-    });
+    let message = `📘 *Detailed GPA Log*\n🧑‍🎓 User ID: ${userId}\n🎓 Program: ${program}\n📅 Date: ${date}\n🎯 GPA: *${gpa}*\n\n`;
+
+    if (results) {
+      results.forEach((r, i) => {
+        message += `${i + 1}. ${r.course}\nScore: ${r.score} → ${r.grade} (${
+          r.point
+        }) x ${r.credit}\n\n`;
+      });
+    } else if (data.semesterGpas) {
+      message += `Semester GPAs: ${data.semesterGpas.join(", ")}\n`;
+    }
 
     await ctx.answerCbQuery();
     await ctx.replyWithMarkdown(message);
@@ -1160,25 +1244,28 @@ bot.on("text", async (ctx) => {
         `Your cGPA is: ${finalCgpa} \nGrade: ${letter}\n🔍 Verification ID: ${verificationId}`
       );
 
-      const pdfPath = await generatecGpaPdf(
-        chatId,
-        SemesterData,
-        finalCgpa,
-        userFullName
-      );
+      // Temporarily disabled PDF generation
+      // const pdfPath = await generatecGpaPdf(
+      //   chatId,
+      //   SemesterData,
+      //   finalCgpa,
+      //   userFullName
+      // );
+      //
+      // try {
+      //   await ctx.replyWithDocument({
+      //     source: pdfPath,
+      //     filename: `cGPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
+      //   });
+      //   fs.unlinkSync(pdfPath);
+      // } catch (err) {
+      //   console.error("PDF generation error:", err);
+      //   await ctx.reply("⚠️ Error generating PDF. Your cGPA is still saved.");
+      // } finally {
+      //   delete userStates[chatId];
+      // }
 
-      try {
-        await ctx.replyWithDocument({
-          source: pdfPath,
-          filename: `cGPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
-        });
-        fs.unlinkSync(pdfPath);
-      } catch (err) {
-        console.error("PDF generation error:", err);
-        await ctx.reply("⚠️ Error generating PDF. Your cGPA is still saved.");
-      } finally {
-        delete userStates[chatId];
-      }
+      delete userStates[chatId];
       return;
     }
   }
@@ -1224,24 +1311,13 @@ bot.on("text", async (ctx) => {
         )}\n🔍 Verification ID: ${verificationId}\n\n📄 PDF Generation temporarly not available!`
       );
       delete sessions[chatId];
-
-      //const pdfPath = await generateGpaPdfFirst(
-      //  chatId,
-      //   session,
-      //   gpa,
-      //   userFullName
-      // );
-
-      // await ctx.replyWithDocument({
-      //   source: pdfPath,
-      //    filename: `GPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
-      //  });
-      // fs.unlinkSync(pdfPath);
+      delete userStates[chatId];
       return;
     } catch (err) {
       console.error("PDF generation error:", err);
     } finally {
       delete sessions[chatId];
+      delete userStates[chatId];
     }
   }
 
@@ -1256,12 +1332,18 @@ bot.on("text", async (ctx) => {
     session.scores.push(score);
     session.index++;
 
+    // Determine which course list to use based on program
+    const courses =
+      session.program === "Other Natural Science"
+        ? coursesOtherNaturalScience
+        : coursesPreEngineering;
+
     if (session.index < courses.length)
       return ctx.reply(`Next score for: ${courses[session.index].name}`);
 
     let totalWeighted = 0,
       totalCredits = 0;
-    let resultText = "📊 GPA Results:\n\n";
+    let resultText = `📊 ${session.program} GPA Results:\n\n`;
 
     session.scores.forEach((score, i) => {
       const { letter, point } = getGrade(score);
@@ -1282,26 +1364,20 @@ bot.on("text", async (ctx) => {
 
     try {
       await ctx.reply(
-        `${resultText}\n🎯 Final GPA: ${gpa.toFixed(
+        `${resultText}\n🎓 Program: ${
+          session.program
+        }\n🎯 Final GPA: ${gpa.toFixed(
           2
         )}\n🔍 Verification ID: ${verificationId}\n\n📄 PDF Generation temporarly not available!`
       );
       delete sessions[chatId];
-
-      // const pdfPath = await generateGpaPdf(chatId, session, gpa, userFullName);
-      // await ctx.replyWithDocument({
-      //   source: pdfPath,
-      //   filename: `GPA_Result_${userFullName.replace(/\s+/g, "_")}.pdf`,
-      //  });
-      //  fs.unlinkSync(pdfPath);
+      delete userStates[chatId];
       return;
     } catch (err) {
       console.error("PDF generation error:", err);
-      //await ctx.reply(
-      //   "⚠️ Error generating PDF. Here are your results:\n\n" + resultText
-      // );
     } finally {
       delete sessions[chatId];
+      delete userStates[chatId];
     }
   }
 
@@ -1309,7 +1385,7 @@ bot.on("text", async (ctx) => {
 
   if (
     session.mode === "broadcast" ||
-    userStates[chatId].status === "broadcast"
+    userStates[chatId]?.status === "broadcast"
   ) {
     const macros = {
       VERSION: botVersion,
@@ -1342,6 +1418,7 @@ bot.on("text", async (ctx) => {
       `📊 Broadcast Results:\n✅ Sent: ${success}\n❌ Failed: ${failed}`
     );
     delete sessions[chatId];
+    delete userStates[chatId];
     return;
   }
 });
@@ -1418,6 +1495,7 @@ app.post("/api/verify", async (req, res) => {
       gpa: logData.gpa,
       date: logData.timestamp,
       type: logData.type || "GPA",
+      program: logData.program || "Pre-Engineering",
       results: logData.results,
     });
   } catch (error) {
