@@ -1239,6 +1239,9 @@ bot.on("text", async (ctx) => {
         finalCgpa,
         "CGPA"
       );
+      await ctx.reply("calculating, please wait...");
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await ctx.deleteMessage();
 
       await ctx.reply(
         `Your cGPA is: ${finalCgpa} \nGrade: ${letter}\n🔍 Verification ID: ${verificationId}`
@@ -1297,6 +1300,9 @@ bot.on("text", async (ctx) => {
         course.credit
       } = ${weighted.toFixed(2)}\n`;
     });
+    await ctx.reply("calculating, please wait...");
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await ctx.deleteMessage();
 
     const gpa = totalWeighted / totalCredits;
     const verificationId = await logUserCalculation(chatId, session, gpa);
@@ -1361,6 +1367,10 @@ bot.on("text", async (ctx) => {
     const userFullName = `${ctx.from.first_name || ""} ${
       ctx.from.last_name || ""
     }`.trim();
+
+    await ctx.reply("calculating, please wait...");
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await ctx.deleteMessage();
 
     try {
       await ctx.reply(
