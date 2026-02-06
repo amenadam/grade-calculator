@@ -868,8 +868,8 @@ async function logUserCalculation(chatId, data, gpa, type = "GPA") {
       data.program === "Other Natural Science"
         ? coursesOtherNaturalScience
         : data.program === "First Semester"
-        ? firstSemesterNaturalCourses
-        : coursesPreEngineering;
+          ? firstSemesterNaturalCourses
+          : coursesPreEngineering;
 
     logData.results = data.scores.map((score, i) => {
       const grade = getGrade(score);
@@ -901,20 +901,34 @@ function replaceMacros(message, macros = {}) {
 }
 
 // Bot middleware
+// Update the bot middleware (around line 240) to add registration date
 bot.use(async (ctx, next) => {
   if (ctx.from) {
     const chatId = ctx.from.id;
+    const userRef = usersRef.doc(chatId.toString());
+
     try {
-      await usersRef.doc(chatId.toString()).set(
-        {
+      const userDoc = await userRef.get();
+
+      if (!userDoc.exists) {
+        // New user - add registration date
+        await userRef.set({
           id: chatId,
           username: ctx.from.username || null,
           firstName: ctx.from.first_name || "",
           lastName: ctx.from.last_name || "",
           lastActivity: new Date().toISOString(),
-        },
-        { merge: true }
-      );
+          registered: new Date().toISOString(), // Add registration date
+        });
+      } else {
+        // Existing user - update last activity
+        await userRef.update({
+          lastActivity: new Date().toISOString(),
+          username: ctx.from.username || null,
+          firstName: ctx.from.first_name || "",
+          lastName: ctx.from.last_name || "",
+        });
+      }
     } catch (error) {
       console.error("Error updating user activity:", error);
     }
@@ -933,7 +947,7 @@ bot.start(async (ctx) => {
         ADMIN_ID,
         `🆕 New user:\n👤 ${user.first_name} ${
           user.last_name || ""
-        }\n🆔 ${chatId}\n📛 @${user.username || "N/A"}`
+        }\n🆔 ${chatId}\n📛 @${user.username || "N/A"}`,
       );
     } catch (err) {
       console.error("Error notifying admin:", err);
@@ -947,7 +961,7 @@ bot.start(async (ctx) => {
       ["[NEW] Calculate cGPA"],
       ["📜 My History", "🔍 Verify Result"],
       ["📢 About"],
-    ]).resize()
+    ]).resize(),
   );
 });
 
@@ -958,11 +972,386 @@ This calculator is for estimation purposes only. The official GPA and CGPA will 
 
 Bot version: ${botVersion}
 
-Powered by @JUStudentsNetwork`
+Powered by @JUStudentsNetwork`,
   );
 });
+// Add this after other command handlers (around line 360)
+bot.command("stats", async (ctx) => {
+  const chatId = ctx.chat.id.toString();
 
+  // Check if user is admin
+  if (chatId !== ADMIN_ID) {
+    return ctx.reply("🚫 You are not authorized to access statistics.");
+  }
+
+  try {
+    // Show loading message
+    const loadingMsg = await ctx.reply("📊 Gathering statistics...");
+
+    // Get total unique users from logs
+    const logsSnapshot = await logsRef.get();
+    const uniqueUsersFromLogs = new Set();
+    logsSnapshot.forEach((doc) => {
+      const data = doc.data();
+      if (data.userId) {
+        uniqueUsersFromLogs.add(data.userId.toString());
+      }
+    });
+
+    // Get total users from users collection
+    const usersSnapshot = await usersRef.get();
+    const totalUsersInDB = usersSnapshot.size;
+
+    // Get user details for display
+    const activeUsers = [];
+    usersSnapshot.forEach((doc) => {
+      const userData = doc.data();
+      activeUsers.push({
+        id: userData.id,
+        username: userData.username || "No username",
+        firstName: userData.firstName || "",
+        lastName: userData.lastName || "",
+        lastActivity: userData.lastActivity
+          ? new Date(userData.lastActivity).toLocaleString()
+          : "Unknown",
+      });
+    });
+
+    // Calculate today's active users
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayActiveUsers = activeUsers.filter((user) => {
+      if (!user.lastActivity || user.lastActivity === "Unknown") return false;
+      const userDate = new Date(user.lastActivity);
+      return userDate >= today;
+    });
+
+    // Calculate this week's active users
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const weeklyActiveUsers = activeUsers.filter((user) => {
+      if (!user.lastActivity || user.lastActivity === "Unknown") return false;
+      const userDate = new Date(user.lastActivity);
+      return userDate >= weekAgo;
+    });
+
+    // Count GPA calculations
+    const gpaCalculations = logsSnapshot.docs.filter((doc) => {
+      const data = doc.data();
+      return data.type === "GPA" || !data.type; // Include old logs without type field
+    }).length;
+
+    // Count CGPA calculations
+    const cgpaCalculations = logsSnapshot.docs.filter((doc) => {
+      const data = doc.data();
+      return data.type === "CGPA";
+    }).length;
+
+    // Count verifications
+    const verificationIds = new Set();
+    logsSnapshot.forEach((doc) => {
+      const data = doc.data();
+      if (data.verificationId) {
+        verificationIds.add(data.verificationId);
+      }
+    });
+
+    // Get top programs
+    const programCounts = {};
+    logsSnapshot.forEach((doc) => {
+      const data = doc.data();
+      const program = data.program || "Pre-Engineering";
+      programCounts[program] = (programCounts[program] || 0) + 1;
+    });
+
+    // Format statistics message
+    let statsMessage = `🤖 *Bot Statistics*\n\n`;
+    statsMessage += `📈 *User Statistics:*\n`;
+    statsMessage += `├ Total Users (DB): *${totalUsersInDB}*\n`;
+    statsMessage += `├ Unique Users (Logs): *${uniqueUsersFromLogs.size}*\n`;
+    statsMessage += `├ Active Today: *${todayActiveUsers.length}*\n`;
+    statsMessage += `└ Active This Week: *${weeklyActiveUsers.length}*\n\n`;
+
+    statsMessage += `📊 *Calculation Statistics:*\n`;
+    statsMessage += `├ GPA Calculations: *${gpaCalculations}*\n`;
+    statsMessage += `├ CGPA Calculations: *${cgpaCalculations}*\n`;
+    statsMessage += `├ Total Calculations: *${logsSnapshot.size}*\n`;
+    statsMessage += `└ Unique Verifications: *${verificationIds.size}*\n\n`;
+
+    statsMessage += `🎓 *Program Distribution:*\n`;
+    Object.entries(programCounts).forEach(([program, count], index, array) => {
+      const isLast = index === array.length - 1;
+      const prefix = isLast ? "└ " : "├ ";
+      const percentage = ((count / logsSnapshot.size) * 100).toFixed(1);
+      statsMessage += `${prefix}${program}: *${count}* (${percentage}%)\n`;
+    });
+
+    statsMessage += `\n📅 *Last Updated:* ${new Date().toLocaleString()}\n`;
+    statsMessage += `🤖 *Bot Version:* ${botVersion}`;
+
+    // Delete loading message and send stats
+    try {
+      await ctx.deleteMessage(loadingMsg.message_id);
+    } catch (err) {
+      console.error("Error deleting loading message:", err);
+    }
+
+    await ctx.replyWithMarkdown(statsMessage, {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "👥 View User Details", callback_data: "stats_users" },
+            { text: "📊 View Detailed Stats", callback_data: "stats_detailed" },
+          ],
+          [{ text: "🔄 Refresh Stats", callback_data: "stats_refresh" }],
+        ],
+      },
+    });
+  } catch (error) {
+    console.error("Error gathering statistics:", error);
+    await ctx.reply("⚠️ Error gathering statistics. Please try again.");
+  }
+});
+
+// Add this command handler after the /stats command
+bot.command("export_ids", async (ctx) => {
+  const chatId = ctx.chat.id.toString();
+
+  if (chatId !== ADMIN_ID) {
+    return ctx.reply("🚫 You are not authorized.");
+  }
+
+  try {
+    const loadingMsg = await ctx.reply("📋 Collecting user IDs...");
+
+    const usersSnapshot = await usersRef.get();
+    const uniqueIds = new Set();
+
+    // Also get IDs from logs
+    const logsSnapshot = await logsRef.get();
+    logsSnapshot.forEach((doc) => {
+      const data = doc.data();
+      if (data.userId) {
+        uniqueIds.add(data.userId.toString());
+      }
+    });
+
+    // Combine all IDs
+    usersSnapshot.forEach((doc) => {
+      const user = doc.data();
+      if (user.id) {
+        uniqueIds.add(user.id.toString());
+      }
+    });
+
+    const allIds = Array.from(uniqueIds).sort((a, b) => a - b);
+
+    // Create CSV content
+    let csvContent = "Telegram User IDs\n";
+    allIds.forEach((id) => {
+      csvContent += `${id}\n`;
+    });
+
+    // Create JSON content
+    const jsonContent = JSON.stringify(
+      {
+        totalIds: allIds.length,
+        ids: allIds,
+        exportedAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    );
+
+    // Send as text (Telegram has limit of 4096 characters)
+    if (allIds.length <= 100) {
+      let idsMessage = `📋 *Telegram User IDs (${allIds.length} total)*\n\n`;
+      allIds.forEach((id, index) => {
+        if (index < 50) {
+          // Show first 50 IDs
+          idsMessage += `${index + 1}. \`${id}\`\n`;
+        }
+      });
+
+      if (allIds.length > 50) {
+        idsMessage += `\n... and ${allIds.length - 50} more IDs`;
+      }
+
+      await ctx.replyWithMarkdown(idsMessage);
+      await ctx.reply(`📊 Total unique Telegram IDs: ${allIds.length}`);
+    } else {
+      await ctx.reply(
+        `📊 Found ${allIds.length} unique Telegram IDs (too many to display)`,
+      );
+    }
+
+    // Delete loading message
+    try {
+      await ctx.deleteMessage(loadingMsg.message_id);
+    } catch (err) {
+      console.error("Error deleting message:", err);
+    }
+
+    // Offer to send as file via PM
+    await ctx.reply(
+      "📁 To get the complete list as a file, visit:\n" +
+        `${process.env.RENDER_EXTERNAL_URL || "Your-URL"}/api/stats/export\n\n` +
+        "Use the Bearer token for authentication.",
+    );
+  } catch (error) {
+    console.error("Error exporting IDs:", error);
+    await ctx.reply("⚠️ Error exporting user IDs.");
+  }
+});
+
+// Add callback handlers for stats buttons
+bot.action("stats_users", async (ctx) => {
+  const chatId = ctx.chat.id.toString();
+  if (chatId !== ADMIN_ID) {
+    return ctx.answerCbQuery("🚫 Not authorized");
+  }
+
+  try {
+    await ctx.answerCbQuery("📋 Loading user details...");
+
+    const usersSnapshot = await usersRef
+      .orderBy("lastActivity", "desc")
+      .limit(50)
+      .get();
+
+    if (usersSnapshot.empty) {
+      return ctx.reply("📭 No users found in database.");
+    }
+
+    let userListMessage = `👥 *Recent Users (Last 50)*\n\n`;
+
+    usersSnapshot.forEach((doc, index) => {
+      const user = doc.data();
+      userListMessage += `*${index + 1}. ${user.firstName || ""} ${user.lastName || ""}*\n`;
+      userListMessage += `   🆔: ${user.id}\n`;
+      userListMessage += `   📛: @${user.username || "N/A"}\n`;
+      userListMessage += `   📅: ${user.lastActivity ? new Date(user.lastActivity).toLocaleString() : "Unknown"}\n`;
+      userListMessage += `   ─────────────────────\n`;
+    });
+
+    // Split message if too long
+    if (userListMessage.length > 4000) {
+      const midPoint = userListMessage.lastIndexOf("\n", 3500);
+      const part1 = userListMessage.substring(0, midPoint);
+      const part2 = userListMessage.substring(midPoint);
+
+      await ctx.replyWithMarkdown(part1);
+      await ctx.replyWithMarkdown(part2);
+    } else {
+      await ctx.replyWithMarkdown(userListMessage);
+    }
+  } catch (error) {
+    console.error("Error loading user details:", error);
+    await ctx.answerCbQuery("⚠️ Error loading users");
+  }
+});
+
+bot.action("stats_detailed", async (ctx) => {
+  const chatId = ctx.chat.id.toString();
+  if (chatId !== ADMIN_ID) {
+    return ctx.answerCbQuery("🚫 Not authorized");
+  }
+
+  try {
+    await ctx.answerCbQuery("📈 Loading detailed stats...");
+
+    const logsSnapshot = await logsRef
+      .orderBy("timestamp", "desc")
+      .limit(500)
+      .get();
+    const usersSnapshot = await usersRef.get();
+
+    // Calculate daily activity for last 7 days
+    const dailyActivity = {};
+    const last7Days = [];
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dateKey = date.toISOString().split("T")[0];
+      dailyActivity[dateKey] = { calculations: 0, users: new Set() };
+      last7Days.push(dateKey);
+    }
+
+    logsSnapshot.forEach((doc) => {
+      const data = doc.data();
+      const logDate = new Date(data.timestamp);
+      const dateKey = logDate.toISOString().split("T")[0];
+
+      if (dailyActivity[dateKey]) {
+        dailyActivity[dateKey].calculations++;
+        if (data.userId) {
+          dailyActivity[dateKey].users.add(data.userId.toString());
+        }
+      }
+    });
+
+    // Calculate user growth
+    const userGrowth = {};
+    usersSnapshot.forEach((doc) => {
+      const user = doc.data();
+      if (user.lastActivity) {
+        const dateKey = new Date(user.lastActivity).toISOString().split("T")[0];
+        userGrowth[dateKey] = (userGrowth[dateKey] || 0) + 1;
+      }
+    });
+
+    // Format detailed stats
+    let detailedMessage = `📊 *Detailed Statistics*\n\n`;
+
+    detailedMessage += `📅 *Last 7 Days Activity:*\n`;
+    last7Days.forEach((dateKey) => {
+      const day = new Date(dateKey).toLocaleDateString("en-US", {
+        weekday: "short",
+      });
+      const activity = dailyActivity[dateKey] || {
+        calculations: 0,
+        users: new Set(),
+      };
+      detailedMessage += `  ${day} (${dateKey}):\n`;
+      detailedMessage += `    └ Calculations: *${activity.calculations}*\n`;
+      detailedMessage += `    └ Unique Users: *${activity.users.size}*\n`;
+    });
+
+    detailedMessage += `\n📈 *Top Performing Days:*\n`;
+
+    // Sort days by activity
+    const sortedDays = Object.entries(dailyActivity)
+      .sort((a, b) => b[1].calculations - a[1].calculations)
+      .slice(0, 3);
+
+    sortedDays.forEach(([dateKey, activity], index) => {
+      const day = new Date(dateKey).toLocaleDateString("en-US", {
+        weekday: "long",
+      });
+      detailedMessage += `${index + 1}. ${day}: *${activity.calculations}* calculations by *${activity.users.size}* users\n`;
+    });
+
+    // Add bot info
+    detailedMessage += `\n🤖 *Bot Information:*\n`;
+    detailedMessage += `├ Version: ${botVersion}\n`;
+    detailedMessage += `├ Webhook: ${WEBHOOK_URL ? "Enabled" : "Disabled"}\n`;
+    detailedMessage += `└ Port: ${PORT}\n`;
+
+    await ctx.replyWithMarkdown(detailedMessage);
+  } catch (error) {
+    console.error("Error loading detailed stats:", error);
+    await ctx.answerCbQuery("⚠️ Error loading stats");
+  }
+});
+
+bot.action("stats_refresh", async (ctx) => {
+  await ctx.answerCbQuery("🔄 Refreshing...");
+  // Trigger the stats command again
+  await ctx.deleteMessage();
+  await ctx.reply("/stats");
+});
 bot.hears("🔍 Verify Result", (ctx) => {
+  /*
   const miniAppUrl = `https://amenadamsolomon.rf.gd/verify.html`;
   return ctx.reply(
     "Verify your GPA results:",
@@ -970,6 +1359,8 @@ bot.hears("🔍 Verify Result", (ctx) => {
       Markup.button.webApp("🔍 Open Verifier", miniAppUrl),
     ])
   );
+  */
+  ctx.reply("Sorry, Verification is not available now!");
 });
 
 bot.hears("[NEW] Calculate cGPA", (ctx) => {
@@ -992,10 +1383,10 @@ bot.hears("🎓 Calculate 2nd Sem. GPA", (ctx) => {
         Markup.button.callback("🔧 Pre-Engineering", "program_pre_engineering"),
         Markup.button.callback(
           "🔬 Other Natural Science",
-          "program_other_science"
+          "program_other_science",
         ),
       ],
-    ])
+    ]),
   );
 });
 
@@ -1021,7 +1412,7 @@ bot.action("program_pre_engineering", async (ctx) => {
   };
 
   return ctx.reply(
-    `Selected: Pre-Engineering\n\nSend your score for: ${coursesPreEngineering[0].name}`
+    `Selected: Pre-Engineering\n\nSend your score for: ${coursesPreEngineering[0].name}`,
   );
 });
 
@@ -1047,7 +1438,7 @@ bot.action("program_other_science", async (ctx) => {
   };
 
   return ctx.reply(
-    `Selected: Other Natural Science\n\nSend your score for: ${coursesOtherNaturalScience[0].name}`
+    `Selected: Other Natural Science\n\nSend your score for: ${coursesOtherNaturalScience[0].name}`,
   );
 });
 
@@ -1069,7 +1460,7 @@ bot.hears("🎓 Calculate 1st Sem. GPA", (ctx) => {
     userLastName: ctx.from.last_name || "",
   };
   return ctx.reply(
-    `Send your score for: ${firstSemesterNaturalCourses[0].name}`
+    `Send your score for: ${firstSemesterNaturalCourses[0].name}`,
   );
 });
 
@@ -1094,7 +1485,7 @@ bot.hears("📜 My History", async (ctx) => {
       `📅 ${date}\n🎓 Program: ${program}\n🎯 GPA: *${gpa}*`,
       Markup.inlineKeyboard([
         Markup.button.callback("🔍 View Details", `viewlog_${docId}`),
-      ])
+      ]),
     );
   }
 });
@@ -1106,7 +1497,7 @@ This calculator is for estimation purposes only. The official GPA and CGPA will 
 
 Bot version: ${botVersion}
 
-Powered by @JUStudentsNetwork`
+Powered by @JUStudentsNetwork`,
   );
 });
 
@@ -1131,7 +1522,7 @@ bot.hears("logs", async (ctx) => {
         `🧾 Log for 🧑‍🎓 ID: ${userId}\n📅 ${date}\n🎓 Program: ${program}\n🎯 GPA: *${gpa}*`,
         Markup.inlineKeyboard([
           Markup.button.callback("🔍 View Details", `viewlog_${docId}`),
-        ])
+        ]),
       );
     }
   } catch (err) {
@@ -1237,7 +1628,7 @@ bot.on("text", async (ctx) => {
         chatId,
         state,
         finalCgpa,
-        "CGPA"
+        "CGPA",
       );
 
       const calculatingMsg = await ctx.reply("calculating, please wait...");
@@ -1250,7 +1641,7 @@ bot.on("text", async (ctx) => {
       }
 
       await ctx.reply(
-        `Your cGPA is: ${finalCgpa} \nGrade: ${letter}\n🔍 Verification ID: ${verificationId}`
+        `Your cGPA is: ${finalCgpa} \nGrade: ${letter}\n🔍 Verification ID: ${verificationId}`,
       );
 
       delete userStates[chatId];
@@ -1268,7 +1659,7 @@ bot.on("text", async (ctx) => {
 
     if (session.index < firstSemesterNaturalCourses.length)
       return ctx.reply(
-        `Next score for: ${firstSemesterNaturalCourses[session.index].name}`
+        `Next score for: ${firstSemesterNaturalCourses[session.index].name}`,
       );
 
     let totalWeighted = 0,
@@ -1304,8 +1695,8 @@ bot.on("text", async (ctx) => {
     try {
       await ctx.reply(
         `${resultText}\n🎯 Final GPA: ${gpa.toFixed(
-          2
-        )}\n🔍 Verification ID: ${verificationId}\n\n📄 PDF Generation temporarly not available!`
+          2,
+        )}\n🔍 Verification ID: ${verificationId}\n\n📄 PDF Generation temporarly not available!`,
       );
       delete sessions[chatId];
       delete userStates[chatId];
@@ -1373,8 +1764,8 @@ bot.on("text", async (ctx) => {
         `${resultText}\n🎓 Program: ${
           session.program
         }\n🎯 Final GPA: ${gpa.toFixed(
-          2
-        )}\n🔍 Verification ID: ${verificationId}\n\n📄 PDF Generation temporarly not available!`
+          2,
+        )}\n🔍 Verification ID: ${verificationId}\n\n📄 PDF Generation temporarly not available!`,
       );
       delete sessions[chatId];
       delete userStates[chatId];
@@ -1421,7 +1812,7 @@ bot.on("text", async (ctx) => {
     }
 
     await ctx.reply(
-      `📊 Broadcast Results:\n✅ Sent: ${success}\n❌ Failed: ${failed}`
+      `📊 Broadcast Results:\n✅ Sent: ${success}\n❌ Failed: ${failed}`,
     );
     delete sessions[chatId];
     delete userStates[chatId];
@@ -1509,7 +1900,120 @@ app.post("/api/verify", async (req, res) => {
     res.status(500).json({ valid: false, error: "Server error" });
   }
 });
+// Add this endpoint after other endpoints (around line 780)
+app.get("/api/stats/export", async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res
+      .status(401)
+      .json({ error: "Unauthorized: Missing Bearer token" });
+  }
 
+  const token = authHeader.split(" ")[1];
+  if (token !== ADMIN_ID) {
+    return res.status(403).json({ error: "Forbidden: Invalid token" });
+  }
+
+  try {
+    // Gather all statistics
+    const logsSnapshot = await logsRef.get();
+    const usersSnapshot = await usersRef.get();
+
+    // Process logs
+    const logs = [];
+    const uniqueUsers = new Set();
+    const verifications = new Set();
+    const programCounts = {};
+    const dailyStats = {};
+
+    logsSnapshot.forEach((doc) => {
+      const data = doc.data();
+      logs.push({
+        id: doc.id,
+        ...data,
+        timestamp: data.timestamp,
+      });
+
+      // Collect unique users
+      if (data.userId) uniqueUsers.add(data.userId.toString());
+
+      // Collect verifications
+      if (data.verificationId) verifications.add(data.verificationId);
+
+      // Count programs
+      const program = data.program || "Pre-Engineering";
+      programCounts[program] = (programCounts[program] || 0) + 1;
+
+      // Daily stats
+      if (data.timestamp) {
+        const date = new Date(data.timestamp).toISOString().split("T")[0];
+        if (!dailyStats[date]) {
+          dailyStats[date] = {
+            date: date,
+            calculations: 0,
+            users: new Set(),
+          };
+        }
+        dailyStats[date].calculations++;
+        if (data.userId) dailyStats[date].users.add(data.userId.toString());
+      }
+    });
+
+    // Process users
+    const users = [];
+    usersSnapshot.forEach((doc) => {
+      const user = doc.data();
+      users.push({
+        id: user.id,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        lastActivity: user.lastActivity,
+        registered: user.registered || null,
+      });
+    });
+
+    // Format daily stats for JSON
+    const formattedDailyStats = Object.values(dailyStats).map((day) => ({
+      date: day.date,
+      calculations: day.calculations,
+      uniqueUsers: Array.from(day.users).length,
+    }));
+
+    // Create statistics object
+    const statistics = {
+      summary: {
+        totalUsers: users.length,
+        uniqueUsersFromLogs: uniqueUsers.size,
+        totalCalculations: logs.length,
+        uniqueVerifications: verifications.size,
+        gpaCalculations: logs.filter((l) => !l.type || l.type === "GPA").length,
+        cgpaCalculations: logs.filter((l) => l.type === "CGPA").length,
+        botVersion: botVersion,
+        generatedAt: new Date().toISOString(),
+      },
+      programDistribution: programCounts,
+      dailyActivity: formattedDailyStats.sort((a, b) =>
+        a.date.localeCompare(b.date),
+      ),
+      recentLogs: logs.slice(0, 100), // Last 100 logs
+      recentUsers: users.slice(0, 100), // Last 100 users
+      userIds: Array.from(uniqueUsers).sort(), // All unique user IDs
+    };
+
+    // Set headers for file download
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="bot-statistics.json"',
+    );
+
+    return res.status(200).json(statistics);
+  } catch (error) {
+    console.error("Error exporting statistics:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 // Webhook setup function
 async function setWebhook() {
   const webhookUrl = `${process.env.RENDER_EXTERNAL_URL}/webhook/${process.env.BOT_TOKEN}`;
