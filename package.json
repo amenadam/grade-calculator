@@ -1,6 +1,6 @@
 {
   "name": "grade-calculator",
-  "version": "2.3.0",
+  "version": "3.0.0",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -15,11 +15,15 @@
     "express": "^5.1.0",
     "firebase-admin": "^13.4.0",
     "fs": "^0.0.1-security",
+    "mongoose": "^9.1.6",
     "node-fetch": "^2.7.0",
     "node-telegram-bot-api": "^0.66.0",
     "path": "^0.12.7",
     "pdfkit": "^0.17.1",
     "qrcode": "^1.5.4",
     "telegraf": "^4.16.3"
+  },
+  "devDependencies": {
+    "mongodb": "^7.1.0"
   }
 }
