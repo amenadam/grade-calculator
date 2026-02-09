@@ -123,6 +123,7 @@ bot.use(async (ctx, next) => {
       const existingUser = await User.findOne({ telegramId: chatId });
       if (!existingUser) {
         await User.create({ telegramId: chatId });
+        bot.telegram.sendMessage(ADMIN_ID, `New User \n ${ctx.from.username} `);
       }
       // NO other data is saved
     } catch (error) {
@@ -279,7 +280,7 @@ bot.on("text", async (ctx) => {
 
     let totalWeighted = 0,
       totalCredits = 0;
-    let resultText = "📊 GPA Results:\n\n";
+    let resultText = "📊<b> GPA Results:</b>\n\n";
 
     session.scores.forEach((score, i) => {
       const { letter, point } = getGrade(score);
@@ -311,10 +312,9 @@ bot.on("text", async (ctx) => {
       "\n⚠️ *Note:* Placement depends on competition, university policy, and capacity.\n" +
       "This result is for guidance purposes only.";
 
-    await ctx.reply(
-      `${resultText}\n🎯 Final GPA: ${gpa.toFixed(2)}\n\n\n${placementText}`,
-      { parse_mode: "HTML" },
-    );
+    await ctx.reply(`${resultText}\n🎯 <b>Final GPA: ${gpa.toFixed(2)}</b>`, {
+      parse_mode: "HTML",
+    });
 
     delete sessions[chatId];
     return;
@@ -343,7 +343,7 @@ bot.on("text", async (ctx) => {
 
     let totalWeighted = 0,
       totalCredits = 0;
-    let resultText = `📊 ${session.program} GPA Results:\n\n`;
+    let resultText = `📊 <b>${session.program} GPA Results:</b>\n\n`;
 
     session.scores.forEach((score, i) => {
       const { letter, point } = getGrade(score);
@@ -359,7 +359,7 @@ bot.on("text", async (ctx) => {
     const gpa = totalWeighted / totalCredits;
 
     await ctx.reply(
-      `${resultText}\n🎓 Program: ${session.program}\n🎯 Final GPA: ${gpa.toFixed(2)}`,
+      `${resultText}\n🎓 <b>Program: ${session.program}\n🎯 Final GPA: ${gpa.toFixed(2)}</b>`,
     );
 
     delete sessions[chatId];
