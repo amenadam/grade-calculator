@@ -989,6 +989,7 @@ This calculator is for estimation purposes only. The official GPA and CGPA will 
 Bot version: ${botVersion}
 
 Powered by @JUStudentsNetwork`,
+    "",
   );
 });
 // Add this after other command handlers (around line 360)
@@ -1732,6 +1733,7 @@ bot.on("text", async (ctx) => {
         `${resultText}\n🎯 Final GPA: ${gpa.toFixed(2)}\n${placementText}
 
 👉 Tip: Calculate your *2nd semester GPA* to see how much you need to improve.`,
+        { parse_mode: "HTML" },
       );
       delete sessions[chatId];
       delete userStates[chatId];
