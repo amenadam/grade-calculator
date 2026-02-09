@@ -1730,7 +1730,7 @@ bot.on("text", async (ctx) => {
 
     try {
       await ctx.reply(
-        `${resultText}\n🎯 Final GPA: ${gpa.toFixed(2)}\n${placementText}
+        `${resultText}\n🎯 Final GPA: ${gpa.toFixed(2)}\n\n\n${placementText}
 
 👉 Tip: Calculate your *2nd semester GPA* to see how much you need to improve.`,
         { parse_mode: "HTML" },
