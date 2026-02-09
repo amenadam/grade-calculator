@@ -123,9 +123,29 @@ bot.use(async (ctx, next) => {
       const existingUser = await User.findOne({ telegramId: chatId });
       if (!existingUser) {
         await User.create({ telegramId: chatId });
-        bot.telegram.sendMessage(ADMIN_ID, `New User \n ${ctx.from.username} `);
+
+        // Send notification to admin AFTER the user is created
+        // Use ctx.telegram instead of bot.telegram for better reliability
+        if (ADMIN_ID) {
+          const username = ctx.from.username
+            ? `@${ctx.from.username}`
+            : "No username";
+          const firstName = ctx.from.first_name || "No first name";
+          const lastName = ctx.from.last_name || "";
+
+          try {
+            await ctx.telegram.sendMessage(
+              ADMIN_ID,
+              `🆕 New User Started Bot:\n\n👤 Name: ${firstName} ${lastName}\n📛 Username: ${username}\n🆔 ID: ${chatId}\n📅 Time: ${new Date().toLocaleString()}`,
+            );
+            console.log(
+              `✅ Notification sent to admin for new user: ${chatId}`,
+            );
+          } catch (notifyError) {
+            console.error("❌ Failed to send admin notification:", notifyError);
+          }
+        }
       }
-      // NO other data is saved
     } catch (error) {
       console.error("Error saving user:", error);
     }
