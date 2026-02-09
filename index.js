@@ -360,6 +360,9 @@ bot.on("text", async (ctx) => {
 
     await ctx.reply(
       `${resultText}\n🎓 <b>Program: ${session.program}\n🎯 Final GPA: ${gpa.toFixed(2)}</b>`,
+      {
+        parse_mode: "HTML",
+      },
     );
 
     delete sessions[chatId];
