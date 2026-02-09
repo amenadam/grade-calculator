@@ -108,6 +108,22 @@ function getGradeByPoint(score) {
   if (score >= 0.0) return { letter: "FX", point: 0.0 };
   return { letter: "F", point: 0.0 };
 }
+function getPlacementAdvice(gpa) {
+  const advice = [];
+
+  if (gpa >= 3.5) {
+    advice.push("🩺 Health Sciences");
+    advice.push("🔧 Pre-Engineering");
+    advice.push("🔬 Other Natural Sciences");
+  } else if (gpa >= 3.0) {
+    advice.push("🔧 Pre-Engineering");
+    advice.push("🔬 Other Natural Sciences");
+  } else if (gpa >= 2.0) {
+    advice.push("🔬 Other Natural Sciences");
+  }
+
+  return advice;
+}
 
 let userStates = {};
 const sessions = {};
@@ -1687,6 +1703,25 @@ bot.on("text", async (ctx) => {
     }
 
     const gpa = totalWeighted / totalCredits;
+
+    const placementOptions = getPlacementAdvice(gpa);
+
+    let placementText =
+      "📌 *Possible Placement Options Based on Your GPA:*\n\n";
+
+    if (placementOptions.length === 0) {
+      placementText +=
+        "❌ Unfortunately, your GPA does not meet the minimum requirement for Natural Science streams.\n";
+    } else {
+      placementOptions.forEach((p) => {
+        placementText += `• ${p}\n`;
+      });
+    }
+
+    placementText +=
+      "\n⚠️ *Note:* Placement depends on competition, university policy, and capacity.\n" +
+      "This result is for guidance purposes only.";
+
     const verificationId = await logUserCalculation(chatId, session, gpa);
     const userFullName = `${ctx.from.first_name || ""} ${
       ctx.from.last_name || ""
@@ -1694,9 +1729,9 @@ bot.on("text", async (ctx) => {
 
     try {
       await ctx.reply(
-        `${resultText}\n🎯 Final GPA: ${gpa.toFixed(
-          2,
-        )}\n🔍 Verification ID: ${verificationId}\n\n📄 PDF Generation temporarly not available!`,
+        `${resultText}\n🎯 Final GPA: ${gpa.toFixed(2)}\n${placementText}
+
+👉 Tip: Calculate your *2nd semester GPA* to see how much you need to improve.`,
       );
       delete sessions[chatId];
       delete userStates[chatId];
@@ -1745,6 +1780,7 @@ bot.on("text", async (ctx) => {
     });
 
     const gpa = totalWeighted / totalCredits;
+
     const verificationId = await logUserCalculation(chatId, session, gpa);
     const userFullName = `${ctx.from.first_name || ""} ${
       ctx.from.last_name || ""
