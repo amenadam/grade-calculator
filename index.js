@@ -34,6 +34,7 @@ const coursesPreEngineering = [
   { name: "Social Anthropology (Anth. 1012)", credit: 4 },
   { name: "Introduction to Emerging Technologies (EmTe. 1012)", credit: 5 },
   { name: "Computer Programming (ECEg 2052)", credit: 5 },
+  { name: "History of Ethiopia and The Horn (Hist 1012)", credit: 5 },
 ];
 
 const coursesOtherNaturalScience = [
