@@ -7,6 +7,7 @@ const mongoose = require("mongoose");
 const userSchema = mongoose.Schema(
   {
     telegramId: { type: Number, required: true, unique: true },
+    lastAdShownAt: {type: Date}
   },
   { timestamps: true },
 );
@@ -25,6 +26,168 @@ app.use(express.json());
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const ADMIN_ID = process.env.ADMIN_ID;
 
+const maybeShowAd = async (ctx) => {
+  try {
+    const adMsg = await ctx.reply("Loading ad...");
+
+    const userId = ctx.from.id;
+    let user = await User.findOne({ telegramId: userId });
+
+    if (!user) {
+      user = new User({ telegramId: userId });
+      await user.save();
+    }
+
+    if (user.isPremium) {
+      return ctx.telegram.editMessageText(
+        ctx.chat.id,
+        adMsg.message_id,
+        undefined,
+        "You are a premium user. Ads are disabled for you.",
+        { parse_mode: "HTML" }
+      );
+    }
+
+    const now = new Date();
+
+    if (
+      user.lastAdShownAt &&
+      now - user.lastAdShownAt < 1 * 60 * 1000
+    ) {
+      return ctx.telegram.deleteMessage(ctx.chat.id, adMsg.message_id);
+    }
+
+    const endpoints = [
+      "https://ju-lost-and-found.vercel.app/api/ad"
+    ];
+
+    // randomize order
+    const shuffled = endpoints.sort(() => Math.random() - 0.5);
+
+    let data = null;
+
+    for (const url of shuffled) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+
+        data = await res.json();
+        if (data) break;
+      } catch {}
+    }
+
+    if (!data) {
+      return ctx.telegram.deleteMessage(ctx.chat.id, adMsg.message_id);
+    }
+
+    // ============================
+    // ADSGRAM
+    // ============================
+    if (data.text_html) {
+      const keyboard = [];
+
+      if (data.button_name && data.click_url) {
+        keyboard.push([
+          {
+            text: data.button_name,
+            url: data.click_url,
+          },
+        ]);
+      }
+
+      if (data.button_reward_name && data.reward_url) {
+        keyboard.push([
+          {
+            text: data.button_reward_name,
+            url: data.reward_url,
+          },
+        ]);
+      }
+
+      if (data.image_url) {
+        await ctx.telegram.deleteMessage(ctx.chat.id, adMsg.message_id);
+
+        await bot.telegram.sendPhoto(ctx.chat.id, data.image_url, {
+          caption: data.text_html,
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: keyboard,
+          },
+        });
+      } else {
+        await ctx.telegram.editMessageText(
+          ctx.chat.id,
+          adMsg.message_id,
+          undefined,
+          data.text_html,
+          {
+            parse_mode: "HTML",
+            reply_markup: {
+              inline_keyboard: keyboard,
+            },
+            disable_web_page_preview: false,
+          }
+        );
+      }
+    }
+
+    // ============================
+    // YOUR API
+    // ============================
+    else if (data.ad) {
+      const ad = data.ad;
+
+      let text = ad.text;
+
+      if (ad.advertiser) {
+        text += `\n\n#Sponsored by <i>${ad.advertiser}</i>`;
+      }
+
+      const keyboard =
+        ad.buttonLabel && ad.buttonUrl
+          ? {
+              inline_keyboard: [
+                [
+                  {
+                    text: ad.buttonLabel,
+                    url: ad.buttonUrl,
+                  },
+                ],
+              ],
+            }
+          : undefined;
+
+      if (ad.image) {
+        await ctx.telegram.deleteMessage(ctx.chat.id, adMsg.message_id);
+
+        await bot.telegram.sendPhoto(ctx.chat.id, ad.image, {
+          caption: text,
+          parse_mode: "HTML",
+          reply_markup: keyboard,
+        });
+      } else {
+        await ctx.telegram.editMessageText(
+          ctx.chat.id,
+          adMsg.message_id,
+          undefined,
+          text,
+          {
+            parse_mode: "HTML",
+            reply_markup: keyboard,
+          }
+        );
+      }
+    }
+
+    user.lastAdShownAt = now;
+    return await user.save();
+  } catch (error) {
+    console.error("Ad display error:", error);
+    handleSendDevMessage(
+      `[BOT] Ad display error: ${error.message}`
+    );
+  }
+};
 // Course definitions
 const coursesPreEngineering = [
   { name: "Applied Mathematics I (Math. 1041)", credit: 5 },
@@ -166,13 +329,14 @@ bot.start(async (ctx) => {
   );
 });
 
-bot.help((ctx) => {
-  return ctx.reply(
+bot.help( async (ctx) => {
+   ctx.reply(
     `Disclaimer:
 This calculator is for estimation purposes only. The official GPA and CGPA will be determined and published by the University Registrar's office. While we strive for accuracy, always refer to your official transcript for final grades.
 
 Bot version: ${botVersion}`,
   );
+  return await maybeShowAd(ctx);
 });
 
 // GPA calculation handlers (kept but simplified - no logging)
@@ -281,6 +445,7 @@ bot.on("text", async (ctx) => {
       await ctx.reply(`Your cGPA is: ${finalCgpa} \nGrade: ${letter}`);
 
       delete userStates[chatId];
+      await maybeShowAd(ctx)
       return;
     }
   }
@@ -338,6 +503,7 @@ bot.on("text", async (ctx) => {
     });
 
     delete sessions[chatId];
+    await maybeShowAd(ctx)
     return;
   }
 
@@ -385,7 +551,7 @@ bot.on("text", async (ctx) => {
         parse_mode: "HTML",
       },
     );
-
+await maybeShowAd(ctx)
     delete sessions[chatId];
     return;
   }
