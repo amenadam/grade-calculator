@@ -58,7 +58,7 @@ const maybeShowAd = async (ctx) => {
     }
 
     const endpoints = [
-      "https://ju-lost-and-found.vercel.app/api/ad"
+      "https://ju-lost-and-found.vercel.app/api/ad?key=pk_cb8ded8c19f63b7332c0b5f0d21950b0"
     ];
 
     // randomize order
