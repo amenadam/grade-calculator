@@ -2,12 +2,13 @@ require("dotenv").config();
 const express = require("express");
 const { Telegraf, Markup } = require("telegraf");
 const mongoose = require("mongoose");
+const registerIds = require("./idCommand");
 
 // MongoDB User Schema - SIMPLIFIED: only telegramId
 const userSchema = mongoose.Schema(
   {
     telegramId: { type: Number, required: true, unique: true },
-    lastAdShownAt: {type: Date}
+    lastAdShownAt: { type: Date },
   },
   { timestamps: true },
 );
@@ -44,21 +45,18 @@ const maybeShowAd = async (ctx) => {
         adMsg.message_id,
         undefined,
         "You are a premium user. Ads are disabled for you.",
-        { parse_mode: "HTML" }
+        { parse_mode: "HTML" },
       );
     }
 
     const now = new Date();
 
-    if (
-      user.lastAdShownAt &&
-      now - user.lastAdShownAt < 1 * 60 * 1000
-    ) {
+    if (user.lastAdShownAt && now - user.lastAdShownAt < 1 * 60 * 1000) {
       return ctx.telegram.deleteMessage(ctx.chat.id, adMsg.message_id);
     }
 
     const endpoints = [
-      "https://ju-lost-and-found.vercel.app/api/ad?key=pk_cb8ded8c19f63b7332c0b5f0d21950b0"
+      "https://ju-lost-and-found.vercel.app/api/ad?key=pk_cb8ded8c19f63b7332c0b5f0d21950b0",
     ];
 
     // randomize order
@@ -126,7 +124,7 @@ const maybeShowAd = async (ctx) => {
               inline_keyboard: keyboard,
             },
             disable_web_page_preview: false,
-          }
+          },
         );
       }
     }
@@ -174,7 +172,7 @@ const maybeShowAd = async (ctx) => {
           {
             parse_mode: "HTML",
             reply_markup: keyboard,
-          }
+          },
         );
       }
     }
@@ -183,9 +181,7 @@ const maybeShowAd = async (ctx) => {
     return await user.save();
   } catch (error) {
     console.error("Ad display error:", error);
-    handleSendDevMessage(
-      `[BOT] Ad display error: ${error.message}`
-    );
+    handleSendDevMessage(`[BOT] Ad display error: ${error.message}`);
   }
 };
 // Course definitions
@@ -276,7 +272,7 @@ const calculatecGPA = (gpas_arr) => {
   let cGpa = parseFloat((gpas_arr[0] * 30 + gpas_arr[1] * 33) / (30 + 33));
   return cGpa.toFixed(2);
 };
-
+registerIds(bot, { User, adminId: ADMIN_ID, idField: "telegramId" });
 // Bot middleware - ONLY saves telegramId if new user
 bot.use(async (ctx, next) => {
   if (ctx.from) {
@@ -329,8 +325,8 @@ bot.start(async (ctx) => {
   );
 });
 
-bot.help( async (ctx) => {
-   ctx.reply(
+bot.help(async (ctx) => {
+  ctx.reply(
     `Disclaimer:
 This calculator is for estimation purposes only. The official GPA and CGPA will be determined and published by the University Registrar's office. While we strive for accuracy, always refer to your official transcript for final grades.
 
@@ -445,7 +441,7 @@ bot.on("text", async (ctx) => {
       await ctx.reply(`Your cGPA is: ${finalCgpa} \nGrade: ${letter}`);
 
       delete userStates[chatId];
-      await maybeShowAd(ctx)
+      await maybeShowAd(ctx);
       return;
     }
   }
@@ -503,7 +499,7 @@ bot.on("text", async (ctx) => {
     });
 
     delete sessions[chatId];
-    await maybeShowAd(ctx)
+    await maybeShowAd(ctx);
     return;
   }
 
@@ -551,7 +547,7 @@ bot.on("text", async (ctx) => {
         parse_mode: "HTML",
       },
     );
-await maybeShowAd(ctx)
+    await maybeShowAd(ctx);
     delete sessions[chatId];
     return;
   }
