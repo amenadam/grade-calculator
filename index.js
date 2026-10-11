@@ -330,7 +330,9 @@ bot.help(async (ctx) => {
     `Disclaimer:
 This calculator is for estimation purposes only. The official GPA and CGPA will be determined and published by the University Registrar's office. While we strive for accuracy, always refer to your official transcript for final grades.
 
-Bot version: ${botVersion}`,
+Bot version: ${botVersion}
+
+Developed by @ace_links`,
   );
   return await maybeShowAd(ctx);
 });
@@ -408,7 +410,8 @@ bot.hears("📢 About", (ctx) => {
     `Disclaimer:
 This calculator is for estimation purposes only. The official GPA and CGPA will be determined and published by the University Registrar's office. While we strive for accuracy, always refer to your official transcript for final grades.
 
-Bot version: ${botVersion}`,
+Bot version: ${botVersion}
+Developed by @ace_links`,
   );
 });
 
